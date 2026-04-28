@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}WorkLog{% endblock %}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── 라이트 테마 ── */
+    :root {
+      --bg:         #f9f9f8;
+      --surface:    #ffffff;
+      --surface-2:  #f4f4f2;
+      --border:     rgba(0,0,0,0.08);
+      --border-md:  rgba(0,0,0,0.14);
+      --text:       #1a1915;
+      --text-2:     #5c5a55;
+      --text-3:     #9c9a96;
+      --accent:     #d97706;
+      --accent-l:   #fffbeb;
+      --accent-dim: rgba(217,119,6,0.12);
+      --green:      #16a34a;
+      --green-l:    #f0fdf4;
+      --red:        #dc2626;
+      --red-l:      #fef2f2;
+      --blue:       #2563eb;
+      --blue-l:     #eff6ff;
+      --radius-sm:  6px;
+      --radius:     10px;
+      --radius-lg:  14px;
+      --shadow:     0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+      --shadow-md:  0 4px 12px rgba(0,0,0,0.08);
+
+      /* 배지 */
+      --badge-todo-bg:  #f1f5f9; --badge-todo-fg:  #475569;
+      --badge-doing-bg: #eff6ff; --badge-doing-fg: #2563eb;
+      --badge-c-bg:     #f8fafc; --badge-c-fg:     #94a3b8;
+      --alert-amber-bd: #fde68a; --alert-red-bd:   #fecaca;
+
+      /* 히트맵 */
+      --heat-0: #f0f0ee;
+      --heat-1: #d4e8c2;
+      --heat-2: #8ccf6c;
+      --heat-3: #4aab32;
+      --heat-4: #2d7a1f;
+    }
+
+    /* ── 다크 테마 ── */
+    :root[data-theme="dark"] {
+      --bg:         #0f0f0e;
+      --surface:    #1a1916;
+      --surface-2:  #232320;
+      --border:     rgba(255,255,255,0.07);
+      --border-md:  rgba(255,255,255,0.13);
+      --text:       #f0ede8;
+      --text-2:     #a09d98;
+      --text-3:     #605d59;
+      --accent:     #f59e0b;
+      --accent-l:   #1c1400;
+      --accent-dim: rgba(245,158,11,0.15);
+      --green:      #4ade80;
+      --green-l:    #052e16;
+      --red:        #f87171;
+      --red-l:      #1c0505;
+      --blue:       #60a5fa;
+      --blue-l:     #0f1e3d;
+      --shadow:     0 1px 3px rgba(0,0,0,0.3);
+      --shadow-md:  0 4px 16px rgba(0,0,0,0.4);
+      --badge-todo-bg:  #2a2a28; --badge-todo-fg:  #a09d98;
+      --badge-doing-bg: #0f1e3d; --badge-doing-fg: #60a5fa;
+      --badge-c-bg:     #1a1916; --badge-c-fg:     #605d59;
+      --alert-amber-bd: #92400e; --alert-red-bd:   #991b1b;
+      --heat-0: #1e1e1c;
+      --heat-1: #1a3a12;
+      --heat-2: #2d6620;
+      --heat-3: #3d8f2b;
+      --heat-4: #4aab32;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg:#0f0f0e;--surface:#1a1916;--surface-2:#232320;
+        --border:rgba(255,255,255,0.07);--border-md:rgba(255,255,255,0.13);
+        --text:#f0ede8;--text-2:#a09d98;--text-3:#605d59;
+        --accent:#f59e0b;--accent-l:#1c1400;--accent-dim:rgba(245,158,11,0.15);
+        --green:#4ade80;--green-l:#052e16;--red:#f87171;--red-l:#1c0505;
+        --blue:#60a5fa;--blue-l:#0f1e3d;
+        --shadow:0 1px 3px rgba(0,0,0,0.3);--shadow-md:0 4px 16px rgba(0,0,0,0.4);
+        --badge-todo-bg:#2a2a28;--badge-todo-fg:#a09d98;
+        --badge-doing-bg:#0f1e3d;--badge-doing-fg:#60a5fa;
+        --badge-c-bg:#1a1916;--badge-c-fg:#605d59;
+        --alert-amber-bd:#92400e;--alert-red-bd:#991b1b;
+        --heat-0:#1e1e1c;--heat-1:#1a3a12;--heat-2:#2d6620;--heat-3:#3d8f2b;--heat-4:#4aab32;
+      }
+    }
+
+    /* ── 기본 ── */
+    body { background:var(--bg); color:var(--text); font-family:'Pretendard','Segoe UI',system-ui,sans-serif; font-size:14px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+
+    /* ── 레이아웃 ── */
+    .layout  { display:flex; min-height:100vh; }
+    .sidebar { width:216px; background:var(--surface); border-right:1px solid var(--border); padding:0; position:fixed; top:0; bottom:0; display:flex; flex-direction:column; z-index:10; }
+    .main    { margin-left:216px; padding:32px 36px; flex:1; max-width:960px; }
+
+    /* ── 사이드바 ── */
+    .sidebar-logo { padding:20px 18px 16px; border-bottom:1px solid var(--border); }
+    .sidebar-logo-title { font-size:15px; font-weight:700; color:var(--accent); letter-spacing:-.3px; }
+    .sidebar-logo-sub   { font-size:11px; color:var(--text-3); margin-top:1px; }
+    .sidebar-section { padding:12px 8px 4px; font-size:10px; font-weight:600; color:var(--text-3); text-transform:uppercase; letter-spacing:.08em; }
+    .nav-item { display:flex; align-items:center; gap:9px; padding:8px 10px; margin:1px 8px; font-size:13.5px; color:var(--text-2); text-decoration:none; border-radius:var(--radius-sm); transition:background .12s, color .12s; }
+    .nav-item:hover { background:var(--surface-2); color:var(--text); }
+    .nav-item.active { background:var(--accent-dim); color:var(--accent); font-weight:500; }
+    .nav-icon { font-size:15px; width:18px; text-align:center; flex-shrink:0; }
+    .sidebar-bottom { margin-top:auto; padding:12px 16px; border-top:1px solid var(--border); }
+
+    /* ── 테마 토글 ── */
+    .theme-btn { display:flex; align-items:center; gap:7px; width:100%; background:none; border:1px solid var(--border-md); border-radius:var(--radius-sm); padding:6px 10px; color:var(--text-2); font-size:12px; cursor:pointer; transition:all .12s; }
+    .theme-btn:hover { background:var(--surface-2); color:var(--text); }
+
+    /* ── 카드 ── */
+    .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px; margin-bottom:16px; box-shadow:var(--shadow); }
+    .card-title { font-size:11px; font-weight:600; color:var(--text-3); text-transform:uppercase; letter-spacing:.07em; margin-bottom:14px; }
+
+    /* ── 배지 ── */
+    .badge { display:inline-flex; align-items:center; font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px; }
+    .badge-todo     { background:var(--badge-todo-bg);  color:var(--badge-todo-fg); }
+    .badge-doing    { background:var(--badge-doing-bg); color:var(--badge-doing-fg); }
+    .badge-done     { background:var(--green-l);        color:var(--green); }
+    .badge-cancelled{ background:var(--surface-2);      color:var(--text-3); }
+    .badge-a        { background:var(--red-l);   color:var(--red); }
+    .badge-b        { background:#fffbeb;        color:#b45309; }
+    .badge-c        { background:var(--badge-c-bg); color:var(--badge-c-fg); }
+
+    /* ── 버튼 ── */
+    .btn { display:inline-flex; align-items:center; gap:6px; padding:7px 14px; border-radius:var(--radius-sm); border:1px solid var(--border-md); background:var(--surface); color:var(--text); font-size:13px; cursor:pointer; transition:all .12s; white-space:nowrap; }
+    .btn:hover { background:var(--surface-2); }
+    .btn-primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .btn-primary:hover { opacity:.9; }
+    .btn-ghost { border-color:transparent; background:transparent; }
+    .btn-ghost:hover { background:var(--surface-2); }
+    .btn-sm { padding:4px 10px; font-size:12px; }
+    .btn-icon { padding:5px 8px; }
+
+    /* ── 입력 ── */
+    input:not([type=checkbox]):not([type=radio]),
+    textarea, select {
+      font-family:inherit; font-size:13px;
+      border:1px solid var(--border-md); border-radius:var(--radius-sm);
+      padding:8px 11px; background:var(--surface); color:var(--text);
+      width:100%; outline:none; transition:border-color .12s, box-shadow .12s;
+    }
+    input:focus, textarea:focus, select:focus {
+      border-color:var(--accent);
+      box-shadow:0 0 0 3px var(--accent-dim);
+    }
+    textarea { resize:vertical; }
+    select option { background:var(--surface); color:var(--text); }
+
+    /* ── 날짜 피커 커스텀 ── */
+    .date-picker-wrap { position:relative; display:inline-block; width:100%; }
+    .date-picker-wrap input[type=date] { padding-right:36px; }
+    .date-picker-wrap::after { content:'📅'; position:absolute; right:10px; top:50%; transform:translateY(-50%); font-size:14px; pointer-events:none; }
+    input[type=date]::-webkit-calendar-picker-indicator { opacity:0; position:absolute; right:0; width:36px; height:100%; cursor:pointer; }
+
+    /* ── 경고 배너 ── */
+    .alert { display:flex; align-items:flex-start; gap:10px; padding:12px 16px; border-radius:var(--radius); margin-bottom:12px; font-size:13px; }
+    .alert-amber { background:var(--accent-l); color:var(--accent); border:1px solid var(--alert-amber-bd); }
+    .alert-red   { background:var(--red-l);    color:var(--red);    border:1px solid var(--alert-red-bd); }
+
+    /* ── 페이지 헤더 ── */
+    .page-header { margin-bottom:24px; }
+    .page-header h1 { font-size:22px; font-weight:700; letter-spacing:-.4px; }
+    .page-header p  { color:var(--text-2); font-size:13px; margin-top:3px; }
+
+    /* ── Task 행 ── */
+    .task-row { display:flex; align-items:flex-start; gap:10px; padding:10px 0; border-bottom:1px solid var(--border); }
+    .task-row:last-child { border-bottom:none; }
+    .task-meta { font-size:11px; color:var(--text-3); display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:3px; }
+
+    /* ── 체크박스 Task ── */
+    .task-check { width:17px; height:17px; border:1.5px solid var(--border-md); border-radius:4px; cursor:pointer; flex-shrink:0; margin-top:2px; appearance:none; -webkit-appearance:none; background:var(--surface); transition:all .1s; }
+    .task-check:checked { background:var(--green); border-color:var(--green); background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 10 8' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 4l3 3 5-6' stroke='white' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:center; }
+
+    /* ── 히트맵 ── */
+    .heatmap { display:flex; gap:3px; flex-wrap:wrap; }
+    .heatmap-cell { width:13px; height:13px; border-radius:3px; cursor:default; transition:transform .1s; }
+    .heatmap-cell:hover { transform:scale(1.3); }
+    .heat-0 { background:var(--heat-0); }
+    .heat-1 { background:var(--heat-1); }
+    .heat-2 { background:var(--heat-2); }
+    .heat-3 { background:var(--heat-3); }
+    .heat-4 { background:var(--heat-4); }
+
+    /* ── 유틸 ── */
+    .flex { display:flex; } .gap4{gap:4px;} .gap8{gap:8px;} .gap12{gap:12px;}
+    .items-center{align-items:center;} .items-start{align-items:flex-start;}
+    .justify-between{justify-content:space-between;} .flex-1{flex:1;}
+    .mt4{margin-top:4px;} .mt8{margin-top:8px;} .mt12{margin-top:12px;} .mt16{margin-top:16px;}
+    .text-2{color:var(--text-2);} .text-3{color:var(--text-3);}
+    .text-sm{font-size:12px;} .text-xs{font-size:11px;}
+    .font-medium{font-weight:500;} .font-semibold{font-weight:600;}
+    .line-through{text-decoration:line-through;}
+    .w-full{width:100%;}
+    .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+    .grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+  </style>
+</head>
+<body>
+<div class="layout">
+
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-title">📋 WorkLog</div>
+      <div class="sidebar-logo-sub">업무 자동화 도구</div>
+    </div>
+    <div class="sidebar-section">메뉴</div>
+    <a href="/" class="nav-item {% if page=='journal' %}active{% endif %}">
+      <span class="nav-icon">📅</span> 오늘 일지
+    </a>
+    <a href="/tasks" class="nav-item {% if page=='tasks' %}active{% endif %}">
+      <span class="nav-icon">✅</span> Task 관리
+    </a>
+    <a href="/weekly" class="nav-item {% if page=='weekly' %}active{% endif %}">
+      <span class="nav-icon">📊</span> 주간 뷰
+    </a>
+    <div class="sidebar-bottom">
+      <button class="theme-btn" onclick="toggleTheme()">
+        <span id="theme-icon">🌙</span>
+        <span id="theme-label">다크 모드</span>
+      </button>
+      <div class="text-xs text-3" style="margin-top:8px;">localhost:8080</div>
+    </div>
+  </nav>
+
+  <main class="main">
+    {% block content %}{% endblock %}
+  </main>
+
+</div>
+
+<!-- Toast -->
+<div id="toast" style="position:fixed;bottom:24px;right:24px;background:var(--text);color:var(--bg);padding:10px 18px;border-radius:var(--radius);font-size:13px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:999;box-shadow:var(--shadow-md);"></div>
+
+<script>
+/* ── 테마 ── */
+(function(){
+  const saved=localStorage.getItem('wl-theme');
+  const sys=window.matchMedia('(prefers-color-scheme: dark)').matches;
+  applyTheme(saved||(sys?'dark':'light'),false);
+})();
+function applyTheme(t,save=true){
+  document.documentElement.setAttribute('data-theme',t);
+  const icon=document.getElementById('theme-icon');
+  const label=document.getElementById('theme-label');
+  if(icon) icon.textContent=t==='dark'?'☀️':'🌙';
+  if(label) label.textContent=t==='dark'?'라이트 모드':'다크 모드';
+  if(save) localStorage.setItem('wl-theme',t);
+}
+function toggleTheme(){
+  applyTheme(document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark');
+}
+
+/* ── 프로젝트 드롭다운 공통 ── */
+async function loadProjects(selectEl, currentVal=''){
+  const res = await fetch('/api/projects');
+  const projects = await res.json();
+  selectEl.innerHTML = '<option value="">프로젝트 없음</option>';
+  projects.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p.name; opt.textContent = p.name;
+    if(p.name === currentVal) opt.selected = true;
+    selectEl.appendChild(opt);
+  });
+  const addOpt = document.createElement('option');
+  addOpt.value = '__add__'; addOpt.textContent = '+ 새 프로젝트 추가';
+  selectEl.appendChild(addOpt);
+}
+async function handleProjectSelect(selectEl, onAdd){
+  if(selectEl.value === '__add__'){
+    const name = prompt('새 프로젝트 이름을 입력하세요:');
+    if(name && name.trim()){
+      const r = await api('/api/projects/add', {name: name.trim()});
+      if(r.ok){
+        await loadProjects(selectEl, name.trim());
+        selectEl.value = name.trim();
+        if(onAdd) onAdd(name.trim());
+        toast('프로젝트 추가됨: ' + name.trim());
+      }
+    } else {
+      selectEl.value = '';
+    }
+  }
+}
+
+/* ── Toast & API ── */
+function toast(msg,dur=2500){
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.style.opacity=1;
+  setTimeout(()=>el.style.opacity=0,dur);
+}
+async function api(url,body){
+  const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  return r.json();
+}
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

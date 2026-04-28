@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.pytest_cache/
+
+# venv
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Claude Code worktree/캐시 (개발 도구 산출물)
+.claude/
+
+# 작업 중 생긴 백업
+templates/*.backup.html
+
+# 데이터 (폐쇄망에서 자동 생성/누적되는 것 — 절대 커밋 금지)
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+backups/
+
+# 로그
+*.log
+logs/
+
+# 핸드오프 패키지 (참고용 — 필요 시 풀어서 다시 추가)
+# design_handoff_worklog/  ← 일단 포함
+
+# ─── 아래는 커밋 포함 ───────────────────────────────
+# wheels/        ← 폐쇄망 설치용 wheel 미러 (커밋 O)
+# static/vendor/ ← React/Babel 로컬 미러 (커밋 O)

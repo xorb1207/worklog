@@ -1,0 +1,2598 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WorkLog — 업무 자동화 앱</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #f5f1ec;
+  --surface: #ffffff;
+  --surface-2: #faf8f5;
+  --border: #ebe5dc;
+  --border-2: #dfd9d2;
+  --text: #1e1b18;
+  --text-2: #5c564f;
+  --text-3: #8b857d;
+  --text-4: #a39d96;
+  --accent: #4f46e5;
+  --accent-light: #eef2ff;
+  --accent-text: #4338ca;
+  --red: #dc2626;
+  --red-light: #fee2e2;
+  --amber: #d97706;
+  --amber-light: #fef3c7;
+  --green: #16a34a;
+  --green-light: #dcfce7;
+  --blue: #2563eb;
+  --blue-light: #dbeafe;
+  --prio-a: #dc2626;
+  --prio-b: #d97706;
+  --prio-c: #78716c;
+  --proj-1: #2563eb;
+  --proj-2: #7c3aed;
+  --proj-3: #059669;
+  --proj-4: #d97706;
+  --sidebar-w: 176px;
+  --radius: 6px;
+  --radius-sm: 4px;
+  --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+  --shadow-md: 0 4px 6px rgba(0,0,0,.07), 0 2px 4px rgba(0,0,0,.06);
+  --shadow-lg: 0 10px 15px rgba(0,0,0,.08), 0 4px 6px rgba(0,0,0,.05);
+  --font: 'Inter', 'Noto Sans KR', sans-serif;
+  --mono: 'JetBrains Mono', monospace;
+}
+
+[data-dark="true"] {
+  --bg: #0f0e0d;
+  --surface: #1e1c1a;
+  --surface-2: #2a2724;
+  --border: #373330;
+  --border-2: #4a4542;
+  --text: #f5f3f0;
+  --text-2: #d4cfc9;
+  --text-3: #9e9890;
+  --text-4: #6b6560;
+  --accent: #4f8ef7;
+  --accent-light: #1a2f52;
+  --accent-text: #7eb0fa;
+  --red: #f87171;
+  --red-light: #2d1515;
+  --amber: #fbbf24;
+  --amber-light: #2d2008;
+  --green: #4ade80;
+  --green-light: #0f2a19;
+  --blue-light: #1a2f52;
+  --prio-a: #f87171;
+  --prio-b: #fbbf24;
+  --prio-c: #9e9890;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 1.5;
+  transition: background .2s, color .2s;
+}
+
+/* ── Layout ── */
+.app { display: flex; height: 100vh; overflow: hidden; }
+.sidebar { width: var(--sidebar-w); flex-shrink: 0; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.main-header { border-bottom: 1px solid var(--border); padding: 10px 18px; display: flex; align-items: center; gap: 12px; flex-shrink: 0; background: var(--surface); }
+.main-body { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+
+/* ── Sidebar ── */
+.sidebar-logo { padding: 14px 14px 10px; border-bottom: 1px solid var(--border); }
+.sidebar-logo-text { font-size: 15px; font-weight: 700; color: var(--text); letter-spacing: -0.3px; }
+.sidebar-logo-sub { font-size: 10px; color: var(--text-4); margin-top: 1px; }
+.sidebar-section { padding: 10px 10px 6px; }
+.sidebar-section-label { font-size: 10px; font-weight: 600; color: var(--text-4); letter-spacing: .5px; text-transform: uppercase; padding: 0 4px; margin-bottom: 4px; }
+.nav-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; color: var(--text-2); transition: background .12s; user-select: none; }
+.nav-item:hover { background: var(--surface-2); }
+.nav-item.active { background: var(--accent-light); color: var(--accent-text); font-weight: 600; }
+.nav-item .icon { font-size: 14px; width: 18px; text-align: center; }
+.proj-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.sidebar-footer { border-top: 1px solid var(--border); padding: 10px 12px; margin-top: auto; }
+
+/* ── Mini Calendar ── */
+.mini-cal { padding: 4px 10px 8px; }
+.mini-cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.mini-cal-nav { background: none; border: none; cursor: pointer; color: var(--text-3); font-size: 14px; padding: 2px 4px; border-radius: 3px; }
+.mini-cal-nav:hover { background: var(--surface-2); }
+.mini-cal-month { font-size: 12px; font-weight: 600; color: var(--text-2); }
+.mini-cal-grid { display: grid; grid-template-columns: auto repeat(7, 1fr); gap: 1px; }
+.mini-cal-week { font-size: 8px; color: var(--text-4); text-align: center; padding: 2px 3px; line-height: 1.6; opacity: .6; }
+.mini-cal-dow { font-size: 9px; color: var(--text-4); text-align: center; padding: 2px 0; }
+.mini-cal-day { font-size: 10px; text-align: center; padding: 2px; border-radius: 3px; cursor: pointer; color: var(--text-3); }
+.mini-cal-day:hover { background: var(--surface-2); }
+.mini-cal-day.today { background: var(--text); color: var(--surface); font-weight: 700; border-radius: 50%; }
+.mini-cal-day.has-log { background: var(--accent-light); color: var(--accent-text); }
+
+/* ── Dark mode toggle ── */
+.dm-toggle { display: flex; align-items: center; justify-content: space-between; }
+.dm-label { font-size: 12px; color: var(--text-3); }
+.toggle-track { width: 32px; height: 17px; background: var(--border-2); border-radius: 99px; cursor: pointer; position: relative; transition: background .2s; flex-shrink: 0; }
+.toggle-track.on { background: var(--text); }
+.toggle-thumb { position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; background: white; border-radius: 50%; transition: left .2s; }
+.toggle-track.on .toggle-thumb { left: 17px; }
+
+/* ── Header ── */
+.header-title { font-size: 15px; font-weight: 700; color: var(--text); }
+.header-sub { font-size: 12px; color: var(--text-3); }
+.badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 2px 8px; border-radius: 99px; font-weight: 500; }
+.badge-red { background: var(--red-light); color: var(--red); }
+.badge-amber { background: var(--amber-light); color: var(--amber); }
+.badge-green { background: var(--green-light); color: var(--green); }
+.badge-blue { background: var(--blue-light); color: var(--blue); }
+.badge-prio-a { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; font-size: 10px; padding: 1px 5px; border-radius: 3px; font-weight: 700; }
+.badge-prio-b { background: #fef7e6; color: #a16207; border: 1px solid #fcd9a4; font-size: 10px; padding: 1px 5px; border-radius: 3px; font-weight: 700; }
+.badge-prio-c { background: var(--surface-2); color: var(--text-3); border: 1px solid var(--border); font-size: 10px; padding: 1px 5px; border-radius: 3px; }
+.btn { display: inline-flex; align-items: center; gap: 5px; padding: 5px 12px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid var(--border); background: var(--surface); color: var(--text-2); transition: background .12s, border-color .12s; font-family: var(--font); user-select: none; }
+.btn:hover { background: var(--surface-2); }
+.btn-primary { background: var(--text); color: var(--surface); border-color: var(--text); }
+.btn-primary:hover { opacity: .85; }
+.btn-sm { padding: 3px 8px; font-size: 11px; }
+
+/* ── Dashboard 3-col ── */
+.dashboard-grid { display: grid; grid-template-columns: var(--col-1, 1fr) var(--col-2, 1fr) var(--col-3, 260px); height: 100%; overflow: hidden; position: relative; min-width: 0; }
+.dashboard-grid > .col { min-width: 0; }
+.col-resizer { width: 5px; cursor: col-resize; background: transparent; flex-shrink: 0; position: relative; z-index: 5; transition: background .15s; }
+.col-resizer:hover, .col-resizer.dragging { background: var(--accent); }
+.col-resizer::before { content: ''; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 1px; height: 24px; background: var(--border-2); }
+.col-resizer:hover::before, .col-resizer.dragging::before { background: var(--accent); }
+.col-reorder-btn { background: transparent; border: 1px solid var(--border); border-radius: 4px; font-size: 10px; padding: 1px 5px; cursor: pointer; color: var(--text-3); }
+.col-reorder-btn:hover { background: var(--surface-2); color: var(--text); }
+.col { display: flex; flex-direction: column; overflow: hidden; border-right: 1px solid var(--border); }
+.col:last-child { border-right: none; }
+.col-header { padding: 8px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; background: var(--surface); }
+.col-header-title { font-size: 11px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: .5px; }
+.col-body { flex: 1; overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.col-body::-webkit-scrollbar { width: 4px; }
+.col-body::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 99px; }
+
+/* ── Task card ── */
+.task-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 9px 10px; display: flex; flex-direction: column; gap: 5px; transition: box-shadow .12s; }
+.task-card:hover { box-shadow: var(--shadow); }
+.task-card-top { display: flex; align-items: flex-start; gap: 7px; }
+.task-card-title { font-size: 13px; font-weight: 500; color: var(--text); flex: 1; line-height: 1.4; }
+.task-card-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.task-card-actions { display: flex; gap: 4px; margin-top: 4px; }
+.icon-btn { background: none; border: 1px solid var(--border); border-radius: 3px; padding: 2px 6px; font-size: 11px; cursor: pointer; color: var(--text-3); transition: background .12s; }
+.icon-btn:hover { background: var(--surface-2); color: var(--text); }
+.icon-btn.done { background: var(--green-light); border-color: var(--green); color: var(--green); }
+
+/* ── Quick add ── */
+.quick-add { border: 1px dashed var(--border-2); border-radius: var(--radius); padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.quick-input { border: none; border-bottom: 1px solid var(--border); background: transparent; font-size: 13px; font-family: var(--font); color: var(--text); width: 100%; padding: 3px 0; outline: none; }
+.quick-input::placeholder { color: var(--text-4); }
+.quick-input:focus { border-bottom-color: var(--accent); }
+.prio-btns { display: flex; gap: 4px; }
+.prio-btn { border: 1px solid var(--border); border-radius: 3px; padding: 2px 7px; font-size: 11px; cursor: pointer; background: var(--surface); color: var(--text-3); font-family: var(--font); }
+.prio-btn.sel-a { background: #fef2f2; border-color: #fecaca; color: #b91c1c; font-weight: 700; }
+.prio-btn.sel-b { background: #fef7e6; border-color: #fcd9a4; color: #a16207; font-weight: 700; }
+.prio-btn.sel-c { background: var(--surface-2); border-color: var(--border-2); color: var(--text-3); font-weight: 700; }
+
+/* ── Toast ── */
+.toast-stack { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; z-index: 9999; pointer-events: none; }
+.toast { background: var(--text); color: var(--surface); padding: 10px 14px; border-radius: 8px; font-size: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.18); display: flex; align-items: center; gap: 10px; pointer-events: auto; animation: toastIn .25s ease-out; max-width: 460px; }
+.toast .toast-action { color: var(--accent); cursor: pointer; font-weight: 600; padding: 2px 6px; border-radius: 4px; }
+.toast .toast-action:hover { background: rgba(255,255,255,.1); }
+.toast.toast-success { background: #16a34a; }
+@keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ── Search & Tags ── */
+.search-bar { display: flex; align-items: center; gap: 6px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; min-width: 280px; transition: all .15s; }
+.search-bar:focus-within { border-color: var(--accent); background: var(--surface); box-shadow: 0 0 0 3px var(--accent-light); }
+.search-bar input { flex: 1; border: none; outline: none; background: transparent; font-size: 12px; color: var(--text); font-family: var(--font); }
+.search-bar input::placeholder { color: var(--text-4); }
+.search-bar .kbd { font-size: 9px; color: var(--text-4); border: 1px solid var(--border); padding: 1px 5px; border-radius: 3px; }
+.tag-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 99px; font-size: 11px; background: var(--accent-light); color: var(--accent-text); border: 1px solid transparent; cursor: pointer; transition: all .12s; font-weight: 500; }
+.tag-chip:hover { border-color: var(--accent); }
+.tag-chip.lg { font-size: 12px; padding: 3px 10px; }
+.search-result-row { padding: 12px 16px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background .12s; }
+.search-result-row:hover { background: var(--surface-2); }
+.search-snippet { font-size: 12px; color: var(--text-3); margin-top: 4px; line-height: 1.6; }
+.search-snippet mark { background: #fef08a; color: var(--text); padding: 0 2px; border-radius: 2px; font-weight: 600; }
+[data-dark="true"] .search-snippet mark { background: #854d0e; color: #fef9c3; }
+
+/* ── Journal ── */
+.journal-textarea { flex: 1; border: none; background: transparent; font-size: 13px; font-family: var(--mono); color: var(--text); resize: none; outline: none; line-height: 1.9; padding: 0; width: 100%; }
+.journal-textarea::placeholder { color: var(--text-4); }
+.save-status { font-size: 10px; color: var(--text-4); }
+
+/* ── Stats ── */
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.stat-card { background: var(--surface-2); border-radius: var(--radius-sm); padding: 10px 8px; text-align: center; }
+.stat-num { font-size: 22px; font-weight: 700; }
+.stat-label { font-size: 10px; color: var(--text-3); margin-top: 2px; }
+.progress-bar { height: 5px; background: var(--border); border-radius: 99px; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 99px; transition: width .5s ease; }
+
+/* ── Heatmap ── */
+.heatmap-grid { display: flex; gap: 3px; flex-wrap: wrap; }
+.heat-cell { width: 10px; height: 10px; border-radius: 2px; background: var(--surface-2); }
+.heat-1 { background: #bbf7d0; }
+.heat-2 { background: #4ade80; }
+.heat-3 { background: #16a34a; }
+
+/* ── Alert ── */
+.alert { border-radius: var(--radius-sm); padding: 8px 10px; font-size: 12px; margin-bottom: 0; }
+.alert-red { background: var(--red-light); color: var(--red); }
+.alert-amber { background: var(--amber-light); color: var(--amber); }
+
+/* ── Gantt ── */
+.gantt-wrap { display: flex; flex: 1; overflow: hidden; }
+.gantt-names { width: 180px; flex-shrink: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+.gantt-chart-area { flex: 1; overflow-x: auto; overflow-y: hidden; display: flex; flex-direction: column; }
+.gantt-header-row { display: flex; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
+.gantt-header-cell { flex: 1; padding: 5px 6px; font-size: 10px; color: var(--text-3); border-right: 1px solid var(--border); font-weight: 500; min-width: 60px; }
+.gantt-row { display: flex; border-bottom: 1px solid var(--border); align-items: center; height: 40px; }
+.gantt-row:hover { background: var(--surface-2); }
+.gantt-name-cell { height: 40px; padding: 0 12px; display: flex; align-items: center; gap: 7px; border-bottom: 1px solid var(--border); }
+.gantt-name-text { font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+.gantt-bar-cell { flex: 1; position: relative; height: 40px; min-width: 60px; border-right: 1px solid var(--border); }
+.gantt-bar { position: absolute; top: 50%; transform: translateY(-50%); height: 12px; border-radius: 3px; min-width: 8px; }
+.gantt-progress { height: 100%; border-radius: 3px; background: rgba(255,255,255,0.35); }
+.gantt-today { position: absolute; top: 0; bottom: 0; width: 1.5px; z-index: 2; pointer-events: none; }
+.gantt-filter-bar { padding: 8px 14px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: center; flex-shrink: 0; background: var(--surface); }
+.filter-chip { padding: 3px 10px; border-radius: 99px; font-size: 11px; border: 1px solid var(--border); cursor: pointer; background: var(--surface); color: var(--text-3); transition: all .12s; }
+.filter-chip.active { background: var(--text); color: var(--surface); border-color: var(--text); font-weight: 600; }
+.gantt-legend { padding: 6px 14px; border-top: 1px solid var(--border); display: flex; gap: 14px; align-items: center; flex-shrink: 0; background: var(--surface); }
+.legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-3); }
+.legend-dot { width: 10px; height: 8px; border-radius: 2px; }
+
+/* ── Modal ── */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.modal { background: var(--surface); border-radius: 10px; box-shadow: var(--shadow-lg); width: 540px; max-width: 100%; overflow: hidden; }
+.modal-header { padding: 18px 20px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.modal-title { font-size: 15px; font-weight: 700; }
+.modal-body { padding: 18px 20px; }
+.modal-footer { padding: 12px 20px 16px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border); }
+.dropzone { border: 2px dashed var(--border-2); border-radius: var(--radius); padding: 36px 20px; text-align: center; cursor: pointer; transition: border-color .15s, background .15s; }
+.dropzone:hover { border-color: var(--accent); background: var(--accent-light); }
+.dropzone-icon { font-size: 40px; margin-bottom: 10px; }
+.step-indicator { display: flex; gap: 6px; align-items: center; }
+.step-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border-2); }
+.step-dot.active { background: var(--accent); width: 20px; border-radius: 99px; }
+.step-dot.done { background: var(--green); }
+.preview-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.preview-table th { background: var(--surface-2); padding: 6px 10px; text-align: left; font-weight: 600; color: var(--text-2); border-bottom: 1px solid var(--border); }
+.preview-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); color: var(--text-2); vertical-align: middle; }
+.preview-table tr:last-child td { border-bottom: none; }
+.proj-select { border: 1px solid var(--border); border-radius: 3px; padding: 2px 6px; font-size: 11px; background: var(--surface); color: var(--text); font-family: var(--font); cursor: pointer; }
+
+/* ── Todo list (sidebar) ── */
+.sidebar-todo { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 3px; cursor: pointer; }
+.sidebar-todo:hover { background: var(--surface-2); }
+.sidebar-todo-check { width: 13px; height: 13px; border-radius: 3px; border: 1.5px solid var(--border-2); flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 8px; }
+.sidebar-todo-check.done { background: var(--green); border-color: var(--green); color: white; }
+.sidebar-todo-text { font-size: 11px; color: var(--text-3); flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+</style>
+</head>
+<body>
+<script type="text/babel">
+const { useState, useRef, useEffect, useCallback } = React;
+
+/* ─── API 헬퍼 ─── */
+/* 백엔드 미연결 감지 — 클로드 디자인 미리보기처럼 Flask 서버 없이 HTML만 열면
+   /api/* 가 전부 404가 됨. 첫 실패 시 플래그를 세우고 이후 콘솔 스팸을 줄이고
+   화면 상단에 안내 배너를 띄움. */
+let __NO_BACKEND__ = false;
+function __markNoBackend__(reason) {
+  if (__NO_BACKEND__) return;
+  __NO_BACKEND__ = true;
+  console.warn('[WorkLog] 백엔드(Flask)에 연결되지 않음 — 데모/미리보기 모드입니다. 사용자 PC에서 `python app.py` 실행 후 http://localhost:8080 으로 열면 정상 동작합니다.', reason || '');
+  /* 작은 데모 배너 */
+  if (typeof document !== 'undefined' && !document.getElementById('__no_backend_banner__')) {
+    const div = document.createElement('div');
+    div.id = '__no_backend_banner__';
+    div.textContent = '⚠ 백엔드 미연결 — 데모/미리보기 모드 (실제 사용 시 python app.py 실행 후 localhost:8080 접속)';
+    div.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#fef3c7;color:#78350f;font:500 12px/1.4 system-ui,sans-serif;padding:7px 14px;text-align:center;border-bottom:1px solid #fcd34d;letter-spacing:-0.01em';
+    if (document.body) document.body.appendChild(div);
+    else document.addEventListener('DOMContentLoaded', () => document.body.appendChild(div));
+  }
+}
+function __isNetworkErr__(e) {
+  const m = (e && e.message) || '';
+  return m.includes('Failed to fetch') || m.includes('NetworkError') || m.includes('failed: 404') || m.includes('failed: 0');
+}
+async function GET(url) {
+  if (__NO_BACKEND__) throw new Error('no-backend');
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`GET ${url} failed: ${r.status}`);
+    return r.json();
+  } catch(e) {
+    if (__isNetworkErr__(e)) __markNoBackend__(e.message);
+    throw e;
+  }
+}
+async function POST(url, body) {
+  if (__NO_BACKEND__) throw new Error('no-backend');
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body || {}),
+    });
+    if (!r.ok) throw new Error(`POST ${url} failed: ${r.status}`);
+    return r.json();
+  } catch(e) {
+    if (__isNetworkErr__(e)) __markNoBackend__(e.message);
+    throw e;
+  }
+}
+/* 백엔드(snake_case) → 프론트(camelCase) 정규화 */
+function normalizeTask(t) {
+  if (!t) return t;
+  return {
+    id: t.id,
+    title: t.title,
+    status: t.status || 'TODO',
+    priority: t.priority || 'B',
+    project: t.project || '',
+    deadline: t.deadline || null,
+    note: t.note || '',
+    createdAt: (t.created_at || '').slice(0, 10),
+    updatedAt: (t.updated_at || '').slice(0, 10),
+    journalDate: t.journal_date || null,
+  };
+}
+
+/* 오늘 날짜 (YYYY-MM-DD) */
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+const TODAY = todayStr();
+
+/* OS 감지: ⌘ vs Ctrl */
+const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+const MOD_KEY = IS_MAC ? '⌘' : 'Ctrl';
+const MOD_LABEL = IS_MAC ? '⌘' : 'Ctrl+';
+
+/* ─── 데이터 시드 — App() 마운트 시 fetch로 채움 ─── */
+/* 검색 가능한 전체 일지 — let으로 두고 fetch 결과로 교체됨 */
+let ALL_JOURNALS = (() => {
+  const seeds = [
+    '- 보고서 초안 작성 #보고서\n- 코드 리뷰 #개발',
+    '- 팀 미팅 자료 준비 #팀운영\n- API 설계 검토 #개발',
+    '- 보고서 데이터 수집 #보고서\n- DB 스키마 검토 #개발',
+    '- 배포 환경 이슈 디버깅 #이슈 #개발\n- 원인 파악 후 패치',
+    '- 1on1 미팅 진행 #팀운영 #미팅\n- 분기 KPI 정리',
+    '- 월간 보고 자료 준비 #보고서\n- 차트 업데이트',
+    '- 레거시 API 정리 검토 #개발\n🤔 일정 산정 어려움',
+    '- 기획서 리뷰 #기획\n- 요구사항 정리',
+    '- PR 머지 3건 #개발\n- 테스트 케이스 추가',
+    '- 외부 미팅 #미팅\n- 협업 범위 협의',
+    '- 문서 정리 #개발 (방치 중)',
+    '- 주간 회고 #팀운영\n- 다음 주 계획',
+    '- 신규 기능 스펙 작성 #기획 #개발',
+    '- 보안 점검 #이슈\n- 취약점 2건 발견',
+    '- 인프라 모니터링 셋업 #개발',
+  ];
+  const out = [];
+  const today = new Date('2026-04-25T00:00:00');
+  for (let i = 0; i < 90; i++) {
+    const d = new Date(today); d.setDate(today.getDate() - i);
+    const dow = d.getDay();
+    if (dow === 0 || dow === 6) continue; // 주말 skip
+    const yyyy = d.getFullYear(), mm = String(d.getMonth()+1).padStart(2,'0'), dd = String(d.getDate()).padStart(2,'0');
+    out.push({ date: `${yyyy}-${mm}-${dd}`, content: seeds[i % seeds.length] });
+  }
+  return out;
+})();
+
+/* 태그 빈도 자동 집계 — let으로 두고 ALL_JOURNALS 변경 시 recomputeTagFreq()로 갱신 */
+function _computeTagFreq() {
+  const counts = {};
+  ALL_JOURNALS.forEach(j => {
+    (j.content.match(/#[^\s#]+/g) || []).forEach(t => {
+      const tag = t.slice(1);
+      counts[tag] = (counts[tag] || 0) + 1;
+    });
+  });
+  return Object.entries(counts).map(([tag, count]) => ({tag, count})).sort((a,b) => b.count - a.count);
+}
+let TAG_FREQ = _computeTagFreq();
+function recomputeTagFreq() { TAG_FREQ = _computeTagFreq(); }
+
+/* INIT_TASKS — 빈 배열로 시작, App() 마운트 시 GET /api/tasks/all 로 채움 */
+const INIT_TASKS = [];
+
+/* 히트맵 — let으로 두고 GET /api/heatmap?days=35 결과로 교체 */
+let HEATMAP_DATA = (() => {
+  const out = [];
+  const today = new Date();
+  for (let i = 34; i >= 0; i--) {
+    const d = new Date(today); d.setDate(today.getDate() - i);
+    out.push({ date: d.toISOString().slice(0,10), count: 0 });
+  }
+  return out;
+})();
+
+/* 주간 일지 — let으로 두고 GET /api/journals/range 결과로 교체 */
+let WEEKLY_JOURNALS = [];
+
+const GANTT_DATA = [
+  { id:1, name:'Q2 기획서 제출', project:'보고서', startWeek:0, endWeek:1, priority:'A', done:80 },
+  { id:2, name:'코드 리팩토링', project:'개발', startWeek:2, endWeek:5, priority:'B', done:30 },
+  { id:3, name:'팀 미팅 준비', project:'팀 운영', startWeek:3, endWeek:3, priority:'B', done:100 },
+  { id:4, name:'월간 보고서', project:'보고서', startWeek:4, endWeek:6, priority:'A', done:0 },
+  { id:5, name:'코드 리뷰', project:'개발', startWeek:4, endWeek:7, priority:'B', done:50 },
+  { id:6, name:'UI 고도화', project:'개발', startWeek:7, endWeek:11, priority:'C', done:0 },
+  { id:7, name:'문서 정리', project:'팀 운영', startWeek:2, endWeek:9, priority:'B', done:10 },
+  { id:8, name:'보안 점검', project:'개발', startWeek:5, endWeek:6, priority:'A', done:60 },
+];
+
+/* PROJECTS — let으로 두고 GET /api/projects 결과로 교체 (string 배열, 이름만) */
+let PROJECTS = [];
+/* PROJ_COLORS — 백엔드 fetch 시 동적으로 채워짐 + 기본 fallback */
+const PROJ_COLORS = { '전체': '#78716c' };
+const WEEKS = ['3/30','4/6','4/13','4/20','4/27','5/4','5/11','5/18','5/25','6/1','6/8','6/15'];
+const TODAY_WEEK = 3.6; // 4/25 is in week index 3.something
+
+const JOURNAL_INIT = '';
+
+/* ─── 유틸 ─── */
+function fmt(d) {
+  if (!d) return '';
+  const dt = new Date(d+'T00:00:00');
+  return `${dt.getMonth()+1}/${dt.getDate()}`;
+}
+function isToday(d) { return d === TODAY; }
+function isUrgent(d) {
+  if (!d) return false;
+  const tmrw = new Date(); tmrw.setDate(tmrw.getDate()+1);
+  return d <= tmrw.toISOString().slice(0,10);
+}
+function formatKoreanDate(dateStr) {
+  if (!dateStr) return '';
+  const [y,m,d] = dateStr.split('-').map(Number);
+  const dt = new Date(y, m-1, d);
+  const dow = ['일','월','화','수','목','금','토'][dt.getDay()];
+  return `${y}년 ${m}월 ${d}일 (${dow})`;
+}
+
+/* ─── MiniCalendar ─── */
+function getISOWeek(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+}
+
+function MiniCalendar({ onSelectDate, selectedDate, journalDates }) {
+  const today = new Date(2026, 3, 25); // April 25, 2026
+  const [viewYear, setViewYear] = React.useState(2026);
+  const [viewMonth, setViewMonth] = React.useState(3); // 0-indexed April
+
+  /* journalDates: { 'YYYY-MM-DD': true } 형태. 백엔드 미연결 시 fallback */
+  const fallbackHasLogDays = [21,22,23,24,25];
+
+  const prevMonth = () => {
+    if (viewMonth === 0) { setViewYear(y => y-1); setViewMonth(11); }
+    else setViewMonth(m => m-1);
+  };
+  const nextMonth = () => {
+    if (viewMonth === 11) { setViewYear(y => y+1); setViewMonth(0); }
+    else setViewMonth(m => m+1);
+  };
+
+  const firstDay = new Date(viewYear, viewMonth, 1);
+  const daysInMonth = new Date(viewYear, viewMonth+1, 0).getDate();
+  // Sunday=0 offset
+  const startOffset = firstDay.getDay(); // 0=Sun
+
+  // Build rows (weeks)
+  const cells = [];
+  for (let i = 0; i < startOffset; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  // pad to full weeks
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const weeks = [];
+  for (let i = 0; i < cells.length; i += 7) {
+    const row = cells.slice(i, i+7);
+    // find first non-null day in row to determine week number
+    const firstD = row.find(x => x !== null);
+    const weekNum = firstD ? getISOWeek(new Date(viewYear, viewMonth, firstD)) : null;
+    weeks.push({ weekNum, days: row });
+  }
+
+  const monthLabel = `${viewYear}년 ${viewMonth+1}월`;
+  const dow = ['일','월','화','수','목','금','토'];
+
+  return (
+    <div className="mini-cal">
+      <div className="mini-cal-header">
+        <button className="mini-cal-nav" onClick={prevMonth}>‹</button>
+        <span className="mini-cal-month">{monthLabel}</span>
+        <button className="mini-cal-nav" onClick={nextMonth}>›</button>
+      </div>
+      <div className="mini-cal-grid">
+        {/* header row */}
+        <div className="mini-cal-week" style={{opacity:.4}}>주</div>
+        {dow.map(d => <div key={d} className="mini-cal-dow">{d}</div>)}
+        {/* week rows */}
+        {weeks.map(({ weekNum, days }, wi) => (
+          <React.Fragment key={wi}>
+            <div className="mini-cal-week">{weekNum}</div>
+            {days.map((d, di) => {
+              if (!d) return <div key={`e${wi}-${di}`} />;
+              const dateStr = `${viewYear}-${String(viewMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+              const isToday = viewYear===2026 && viewMonth===3 && d===25;
+              const isSelected = selectedDate === dateStr;
+              const hasLog = (() => {
+                const key = `${viewYear}-${String(viewMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                if (journalDates && Object.keys(journalDates).length) return !!journalDates[key];
+                return viewYear===2026 && viewMonth===3 && fallbackHasLogDays.includes(d);
+              })();
+              return (
+                <div key={d}
+                  onClick={() => onSelectDate && onSelectDate(dateStr)}
+                  className={`mini-cal-day${isToday?' today':hasLog?' has-log':''}`}
+                  style={isSelected && !isToday ? {outline:'2px solid var(--accent)', outlineOffset:'-1px'} : {}}
+                  title={`${d}일로 이동`}
+                >{d}</div>
+              );
+            })}
+          </React.Fragment>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Sidebar ─── */
+function Sidebar({ view, setView, dark, setDark, projFilter, setProjFilter, projects, onManageProjects, onSelectDate, selectedDate, journalDates }) {
+  return (
+    <aside className="sidebar">
+      <div className="sidebar-logo">
+        <div className="sidebar-logo-text">WorkLog</div>
+        <div className="sidebar-logo-sub">업무 자동화 앱</div>
+      </div>
+
+      <div style={{borderBottom:'1px solid var(--border)'}}>
+        <MiniCalendar onSelectDate={onSelectDate} selectedDate={selectedDate} journalDates={journalDates} />
+      </div>
+
+      <div className="sidebar-section">
+        <div className="sidebar-section-label">보기</div>
+        <div className={`nav-item${view==='dashboard'?' active':''}`} onClick={()=>setView('dashboard')}>
+          <span className="icon">🏠</span> 대시보드
+        </div>
+        <div className={`nav-item${view==='briefing'?' active':''}`} onClick={()=>setView('briefing')}>
+          <span className="icon">📋</span> 브리핑
+        </div>
+        <div className={`nav-item${view==='gantt'?' active':''}`} onClick={()=>setView('gantt')}>
+          <span className="icon">📅</span> 전체 일정
+        </div>
+        <div className={`nav-item${view==='weekly'?' active':''}`} onClick={()=>setView('weekly')}>
+          <span className="icon">📊</span> 주간 리포트
+        </div>
+        <div className={`nav-item${view==='cleanup'?' active':''}`} onClick={()=>setView('cleanup')}>
+          <span className="icon">🧹</span> Task 정리
+        </div>
+      </div>
+
+      <div className="sidebar-section" style={{flex:1}}>
+        <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0 4px', marginBottom:4}}>
+          <div className="sidebar-section-label" style={{marginBottom:0}}>프로젝트</div>
+          <button onClick={onManageProjects} style={{background:'none',border:'none',cursor:'pointer',fontSize:11,color:'var(--text-4)',padding:'1px 4px',borderRadius:3}} title="프로젝트 관리">관리</button>
+        </div>
+        {['전체', ...projects].map(p => (
+          <div key={p} className={`nav-item${projFilter===p?' active':''}`} onClick={()=>setProjFilter(p)}>
+            {p !== '전체' && <div className="proj-dot" style={{background:PROJ_COLORS[p]}} />}
+            {p === '전체' && <span className="icon" style={{fontSize:10}}>◎</span>}
+            <span>{p}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="sidebar-footer">
+        <div className="dm-toggle">
+          <span className="dm-label">{dark ? '🌙 다크모드' : '☀ 라이트모드'}</span>
+          <div className={`toggle-track${dark?' on':''}`} onClick={()=>setDark(!dark)}>
+            <div className="toggle-thumb" />
+          </div>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+/* ─── Dashboard ─── */
+function Dashboard({ tasks, setTasks, projFilter, projects, selectedDate, setSelectedDate, refreshTasks, bumpDataVersion, journalDates, refreshJournalDates }) {
+  const [newTitle, setNewTitle] = useState('');
+  const [newPrio, setNewPrio] = useState('B');
+  const [newProj, setNewProj] = useState('');
+  const [newDeadline, setNewDeadline] = useState('');
+
+  // 날짜별 저널 캐시: { '2026-04-25': '내용...', ... }
+  const [journals, setJournals] = useState({});
+  const journalText = journals[selectedDate] ?? '';
+  const setJournalText = (val) => {
+    setJournals(prev => ({ ...prev, [selectedDate]: typeof val === 'function' ? val(prev[selectedDate] ?? '') : val }));
+  };
+
+  // 선택 날짜가 바뀌면 백엔드에서 일지 로딩 (캐시 우선)
+  useEffect(() => {
+    let cancelled = false;
+    if (journals[selectedDate] !== undefined) return; // 이미 캐시됨
+    GET(`/api/journal/${selectedDate}`)
+      .then(j => {
+        if (cancelled) return;
+        setJournals(prev => ({ ...prev, [selectedDate]: j.content || '' }));
+      })
+      .catch(e => {
+        if (!__NO_BACKEND__) console.error('journal load failed:', e);
+        if (!cancelled) setJournals(prev => ({ ...prev, [selectedDate]: '' }));
+      });
+    return () => { cancelled = true; };
+  }, [selectedDate]);
+
+  // 디바운스 자동저장 (선택 날짜 일지 → POST /journal/save)
+  const lastSavedRef = useRef({});
+  useEffect(() => {
+    const content = journals[selectedDate];
+    if (content === undefined) return;
+    if (lastSavedRef.current[selectedDate] === content) return;
+    const t = setTimeout(() => {
+      POST('/journal/save', { date: selectedDate, content })
+        .then(() => {
+          lastSavedRef.current[selectedDate] = content;
+          setSaveStatus('✓ 자동저장됨');
+          // ALL_JOURNALS / 캘린더 도트 / 검색 인덱스 동기화
+          bumpDataVersion && bumpDataVersion();
+          refreshJournalDates && refreshJournalDates();
+        })
+        .catch(e => {
+          if (!__NO_BACKEND__) console.error('journal save failed:', e);
+          setSaveStatus('⚠ 저장 실패');
+        });
+    }, 600);
+    return () => clearTimeout(t);
+  }, [journals, selectedDate]);
+
+  const [saveStatus, setSaveStatus] = useState('✓ 자동저장됨');
+  const saveTimer = useRef(null);
+  const [activeTag, setActiveTag] = useState(null); // 클릭된 태그 (모든 날짜에서 해당 태그 줄 모아보기)
+
+  // 날짜 이동 헬퍼
+  function shiftDate(days) {
+    const [y, m, d] = selectedDate.split('-').map(Number);
+    const dt = new Date(y, m-1, d);
+    dt.setDate(dt.getDate() + days);
+    const next = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+    setSelectedDate(next);
+  }
+  async function manualSave() {
+    const content = journals[selectedDate] ?? '';
+    try {
+      await POST('/journal/save', { date: selectedDate, content });
+      lastSavedRef.current[selectedDate] = content;
+      const now = new Date();
+      setSaveStatus(`✓ 저장됨 ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`);
+      bumpDataVersion && bumpDataVersion();
+      refreshJournalDates && refreshJournalDates();
+    } catch(e) {
+      console.error(e);
+      setSaveStatus('⚠ 저장 실패');
+    }
+  }
+
+  // 날짜 레이블 (헤더용은 아니고 저널 내부용)
+  function dateLabel(dateStr) {
+    if (dateStr === TODAY) {
+      const [y,m,d] = TODAY.split('-').map(Number);
+      const dow = ['일','월','화','수','목','금','토'][new Date(y, m-1, d).getDay()];
+      return `오늘 (${m}/${d} ${dow})`;
+    }
+    const [y,m,d] = dateStr.split('-').map(Number);
+    const dt = new Date(y, m-1, d);
+    const dow = ['일','월','화','수','목','금','토'][dt.getDay()];
+    return `${m}월 ${d}일 (${dow})`;
+  }
+
+  /* 마감일 기준 정렬: 마감 빠른 순, 없으면 뒤로 */
+  const byDeadline = (a, b) => {
+    if (!a.deadline && !b.deadline) return 0;
+    if (!a.deadline) return 1;
+    if (!b.deadline) return -1;
+    return a.deadline.localeCompare(b.deadline);
+  };
+  const doing = tasks.filter(t => t.status==='DOING' && (projFilter==='전체'||t.project===projFilter)).sort(byDeadline);
+  const todo = tasks.filter(t => t.status==='TODO' && (projFilter==='전체'||t.project===projFilter)).sort(byDeadline);
+  const done = tasks.filter(t => t.status==='DONE' && (projFilter==='전체'||t.project===projFilter));
+  const urgent = tasks.filter(t => t.status!=='DONE' && isUrgent(t.deadline));
+  const stale = tasks.filter(t => t.status==='DOING' && t.id===5);
+  const totalWeek = 11, doneWeek = 8;
+
+  const toast = useToast();
+  async function addTask() {
+    const title = newTitle.trim();
+    if (!title) return;
+    const project = newProj.trim() || (projFilter !== '전체' ? projFilter : '미분류');
+    const deadline = newDeadline || null;
+    // DOING이 이미 5개 이상이면 TODO로 들어감 (집중 한계 보호)
+    const overLimit = doing.length >= 5;
+    const status = overLimit ? 'TODO' : 'DOING';
+    try {
+      await POST('/tasks/add', {
+        title, priority: newPrio, project, deadline,
+        note: '', journal_date: selectedDate,
+      });
+      // 백엔드는 status를 무조건 TODO로 INSERT — DOING으로 시작해야 하면 직후 status 업데이트
+      // 단, /tasks/add 는 id를 반환하지 않으므로, 새 task 찾으려면 refreshTasks → 가장 최근 것
+      await refreshTasks();
+      if (status === 'DOING') {
+        // 방금 추가된 task (제목+생성시각 일치) 찾아서 DOING으로 승격 — best-effort
+        try {
+          const all = await GET('/api/tasks/all');
+          const justAdded = all.find(t => t.title === title && t.status === 'TODO');
+          if (justAdded) {
+            await POST(`/tasks/${justAdded.id}/status`, { status: 'DOING' });
+            await refreshTasks();
+          }
+        } catch(e) {}
+      }
+      setNewTitle(''); setNewPrio('B'); setNewProj(''); setNewDeadline('');
+      const dateLabel = deadline ? `마감 ${deadline.slice(5)}` : '오늘 등록 (마감 없음)';
+      if (overLimit) {
+        toast(`⚠ DOING이 이미 5개라 "${title}" 은(는) TODO로 추가했어요`, { kind: 'success', duration: 4000 });
+      } else {
+        toast(`✓ "${title}" 추가됨 · 📁 ${project} · ${dateLabel}`, { kind: 'success', duration: 4000 });
+      }
+    } catch(e) {
+      console.error(e);
+      toast(`⚠ 추가 실패: ${e.message}`, { duration: 4000 });
+    }
+  }
+  async function setStatus(id, status) {
+    setTasks(prev => prev.map(t => t.id===id ? {...t, status} : t)); // 낙관적 업데이트
+    try { await POST(`/tasks/${id}/status`, { status }); }
+    catch(e) { console.error(e); refreshTasks(); }
+  }
+  async function updateTask(id, patch) {
+    setTasks(prev => prev.map(t => t.id===id ? {...t, ...patch} : t)); // 낙관적
+    try { await POST(`/tasks/${id}/edit`, patch); refreshTasks(); }
+    catch(e) { console.error(e); refreshTasks(); }
+  }
+  async function deleteTask(id) {
+    const t = tasks.find(x => x.id === id);
+    if (!t) return;
+    setTasks(prev => prev.filter(x => x.id !== id)); // 낙관적
+    try { await POST(`/tasks/${id}/delete`, {}); }
+    catch(e) { console.error(e); refreshTasks(); }
+    toast(`🗑 "${t.title}" 삭제됨`, {
+      kind: 'success',
+      duration: 5000,
+      actionLabel: '↩ 실행 취소',
+      onAction: async () => {
+        // 복구 = 다시 add (id는 새로 발급됨)
+        try {
+          await POST('/tasks/add', {
+            title: t.title, priority: t.priority, project: t.project,
+            deadline: t.deadline, note: t.note, journal_date: t.journalDate || selectedDate,
+          });
+          // 원래 status가 TODO 아니면 복구 후 update
+          if (t.status && t.status !== 'TODO') {
+            const all = await GET('/api/tasks/all');
+            const restored = all.find(x => x.title === t.title && x.status === 'TODO');
+            if (restored) await POST(`/tasks/${restored.id}/status`, { status: t.status });
+          }
+          await refreshTasks();
+        } catch(e) { console.error(e); }
+      },
+    });
+  }
+  const journalRef = useRef(null);
+
+  /* 마크다운 리스트 자동 이어쓰기:
+     - "- " 또는 "- [ ] " (또는 [x]) 로 시작한 줄에서 Enter
+     - 빈 항목에서 Enter 누르면 리스트 종료
+     - 체크박스 [ ] / [x] 토글: Ctrl/Cmd+Click */
+  function onJournalKeyDown(e) {
+    const ta = e.target;
+    /* 태그 자동완성 활성 시 Enter→삽입 / Esc→닫기 / Tab→삽입 */
+    if (tagSuggest && tagSuggest.tags.length > 0) {
+      if ((e.key === 'Enter' || e.key === 'Tab') && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); insertTag(tagSuggest.tags[0]); return; }
+      if (e.key === 'Escape') { e.preventDefault(); setTagSuggest(null); return; }
+    }
+    /* Tab → 들여쓰기 / Shift+Tab → 내어쓰기 (멀티라인 지원) */
+    if (e.key === 'Tab' && !e.isComposing && e.keyCode !== 229) {
+      e.preventDefault();
+      const value = ta.value;
+      const start = ta.selectionStart;
+      const end   = ta.selectionEnd;
+      const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+      // 선택의 마지막 줄 끝 (선택이 줄 시작에 끝나면 그 줄 제외)
+      const selEndAdj = (end > start && value[end-1] === '\n') ? end - 1 : end;
+      let blockEnd = value.indexOf('\n', selEndAdj);
+      if (blockEnd === -1) blockEnd = value.length;
+
+      const block = value.slice(lineStart, blockEnd);
+      const lines = block.split('\n');
+      let newLines;
+      if (e.shiftKey) {
+        // 내어쓰기: 줄 앞 공백/탭 2칸까지 제거 ("- " 도 같이 옮겨지는 효과)
+        newLines = lines.map(l => l.replace(/^(\t| {1,2})/, ''));
+      } else {
+        // 들여쓰기: 줄 맨 앞에 2칸 추가 ("- "도 같이 밀림)
+        newLines = lines.map(l => '  ' + l);
+      }
+      const newBlock = newLines.join('\n');
+      const delta = newBlock.length - block.length;
+      const newValue = value.slice(0, lineStart) + newBlock + value.slice(blockEnd);
+      setJournalText(newValue);
+      requestAnimationFrame(() => {
+        if (start === end) {
+          // 단일 커서: 같은 줄 안에서 커서 위치 유지 (들여쓰기 양만큼 이동)
+          const firstLineDelta = newLines[0].length - lines[0].length;
+          ta.selectionStart = ta.selectionEnd = Math.max(lineStart, start + firstLineDelta);
+        } else {
+          // 여러 줄 선택: 블록 전체 다시 선택
+          ta.selectionStart = lineStart;
+          ta.selectionEnd   = blockEnd + delta;
+        }
+      });
+      setSaveStatus('편집 중...');
+      clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => setSaveStatus('✓ 자동저장됨'), 2000);
+      return;
+    }
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
+      const start = ta.selectionStart;
+      const value = ta.value;
+      const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+      const currentLine = value.slice(lineStart, start);
+
+      // 패턴: 들여쓰기 + "- " 또는 "- [ ] " / "- [x] " / "* " / 숫자.
+      const m = currentLine.match(/^(\s*)([-*])\s(\[[ xX]\]\s)?(.*)$/);
+      if (m) {
+        const [, indent, bullet, checkbox, rest] = m;
+        // 빈 항목 → 리스트 종료
+        if (!rest.trim()) {
+          e.preventDefault();
+          const newValue = value.slice(0, lineStart) + '\n' + value.slice(start);
+          setJournalText(newValue);
+          requestAnimationFrame(() => {
+            ta.selectionStart = ta.selectionEnd = lineStart + 1;
+          });
+          setSaveStatus('편집 중...');
+          clearTimeout(saveTimer.current);
+          saveTimer.current = setTimeout(() => setSaveStatus('✓ 자동저장됨'), 2000);
+          return;
+        }
+        // 다음 줄에 같은 prefix 자동 삽입
+        e.preventDefault();
+        const prefix = '\n' + indent + bullet + ' ' + (checkbox ? '[ ] ' : '');
+        const newValue = value.slice(0, start) + prefix + value.slice(start);
+        setJournalText(newValue);
+        const caret = start + prefix.length;
+        requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = caret; });
+        setSaveStatus('편집 중...');
+        clearTimeout(saveTimer.current);
+        saveTimer.current = setTimeout(() => setSaveStatus('✓ 자동저장됨'), 2000);
+      }
+    }
+  }
+
+  /* Cmd/Ctrl + 클릭으로 체크박스 토글 */
+  function onJournalClick(e) {
+    if (!(e.metaKey || e.ctrlKey)) return;
+    const ta = e.target;
+    const pos = ta.selectionStart;
+    const value = ta.value;
+    const lineStart = value.lastIndexOf('\n', pos - 1) + 1;
+    let lineEnd = value.indexOf('\n', pos);
+    if (lineEnd === -1) lineEnd = value.length;
+    const line = value.slice(lineStart, lineEnd);
+    const m = line.match(/^(\s*[-*]\s)\[([ xX])\](.*)$/);
+    if (!m) return;
+    e.preventDefault();
+    const [, head, mark, tail] = m;
+    const newMark = (mark === ' ') ? 'x' : ' ';
+    const newLine = `${head}[${newMark}]${tail}`;
+    setJournalText(value.slice(0, lineStart) + newLine + value.slice(lineEnd));
+    setSaveStatus('편집 중...');
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => setSaveStatus('✓ 자동저장됨'), 2000);
+  }
+
+  const [tagSuggest, setTagSuggest] = useState(null); /* {tags, top, left, prefix, anchor} */
+
+  function onJournalChange(e) {
+    const ta = e.target;
+    const value = ta.value;
+    setJournalText(value); setSaveStatus('편집 중...');
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => setSaveStatus('✓ 자동저장됨'), 2000);
+
+    /* # 자동완성 감지 */
+    const caret = ta.selectionStart;
+    const before = value.slice(0, caret);
+    const m = before.match(/#([^\s#]*)$/);
+    if (m) {
+      const prefix = m[1].toLowerCase();
+      const allTags = TAG_FREQ.map(t => t.tag);
+      const matches = allTags.filter(t => t.toLowerCase().startsWith(prefix)).slice(0, 6);
+      if (matches.length > 0) {
+        setTagSuggest({ tags: matches, prefix: m[1], anchor: caret });
+      } else {
+        setTagSuggest(null);
+      }
+    } else {
+      setTagSuggest(null);
+    }
+  }
+
+  function insertTag(tag) {
+    const ta = journalRef.current;
+    if (!ta || !tagSuggest) return;
+    const value = ta.value;
+    const caret = tagSuggest.anchor;
+    const before = value.slice(0, caret);
+    const m = before.match(/#([^\s#]*)$/);
+    if (!m) return;
+    const start = caret - m[1].length;
+    const newValue = value.slice(0, start) + tag + ' ' + value.slice(caret);
+    setJournalText(newValue);
+    setTagSuggest(null);
+    requestAnimationFrame(() => {
+      ta.focus();
+      const newCaret = start + tag.length + 1;
+      ta.selectionStart = ta.selectionEnd = newCaret;
+    });
+  }
+
+  // Column order state — saves to localStorage
+  const [colOrder, setColOrder] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('worklog.colOrder') || 'null');
+      if (Array.isArray(saved) && saved.length === 3) return saved;
+    } catch(e) {}
+    return ['focus', 'journal', 'stats'];
+  });
+  useEffect(() => { localStorage.setItem('worklog.colOrder', JSON.stringify(colOrder)); }, [colOrder]);
+
+  function moveCol(idx, dir) {
+    const next = [...colOrder];
+    const target = idx + dir;
+    if (target < 0 || target >= next.length) return;
+    [next[idx], next[target]] = [next[target], next[idx]];
+    setColOrder(next);
+  }
+
+  // 숨김 스태이트 (key 배열)
+  const [hiddenCols, setHiddenCols] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('worklog.hiddenCols') || '[]');
+      if (Array.isArray(saved)) return saved;
+    } catch(e) {}
+    return [];
+  });
+  useEffect(() => { localStorage.setItem('worklog.hiddenCols', JSON.stringify(hiddenCols)); }, [hiddenCols]);
+  function hideCol(key) {
+    if (visibleCols.length <= 1) return; // 최소 1개는 남겨야 함
+    setHiddenCols(prev => prev.includes(key) ? prev : [...prev, key]);
+  }
+  function showCol(key) {
+    setHiddenCols(prev => prev.filter(k => k !== key));
+  }
+  const visibleCols = colOrder.filter(k => !hiddenCols.includes(k));
+  const COL_LABELS = { focus: '📌 오늘 집중', journal: '📝 오늘 기록', stats: '📊 이번 주' };
+
+  const HideBtn = ({colKey}) => (
+    <button className="col-reorder-btn" onClick={()=>hideCol(colKey)} title="숨기기" style={{marginLeft:4, opacity: visibleCols.length<=1 ? .3 : 1, cursor: visibleCols.length<=1 ? 'default' : 'pointer'}} disabled={visibleCols.length<=1}>–</button>
+  );
+
+  const ReorderBtns = ({idx}) => (
+    <span style={{display:'inline-flex', gap:2, marginRight:6}}>
+      <button className="col-reorder-btn" disabled={idx===0} onClick={()=>moveColVisible(idx,-1)} title="왼쪽으로" style={{opacity: idx===0?.3:1, cursor: idx===0?'default':'pointer'}}>◀</button>
+      <button className="col-reorder-btn" disabled={idx===visibleCols.length-1} onClick={()=>moveColVisible(idx,1)} title="오른쪽으로" style={{opacity: idx===visibleCols.length-1?.3:1, cursor: idx===visibleCols.length-1?'default':'pointer'}}>▶</button>
+    </span>
+  );
+
+  // visible 기준 인덱스를 colOrder 상의 인접 교체로 변환
+  function moveColVisible(visIdx, dir) {
+    const target = visIdx + dir;
+    if (target < 0 || target >= visibleCols.length) return;
+    const a = visibleCols[visIdx];
+    const b = visibleCols[target];
+    const next = [...colOrder];
+    const ai = next.indexOf(a), bi = next.indexOf(b);
+    [next[ai], next[bi]] = [next[bi], next[ai]];
+    setColOrder(next);
+  }
+
+  const cols = {
+    focus: (idx) => (
+      <div className="col" key="focus">
+        <div className="col-header">
+          <span style={{display:'flex', alignItems:'center'}}>
+            <ReorderBtns idx={idx} />
+            <span className="col-header-title">📌 오늘 집중</span>
+          </span>
+          <span className={`badge ${doing.length >= 5 ? 'badge-red' : doing.length >= 4 ? 'badge-amber' : 'badge-blue'}`} title={doing.length >= 5 ? '집중 항목이 너무 많아요. 5개 이하로 줄이세요.' : doing.length >= 4 ? '집중 항목이 한계에 가까워요' : ''}>{doing.length}/5{doing.length >= 5 ? ' ⚠' : ''}</span>
+        </div>
+        <div className="col-body">
+          <div className="quick-add">
+            <input className="quick-input" placeholder="+ 할 일 빠르게 추가..."
+              value={newTitle} onChange={e=>setNewTitle(e.target.value)}
+              onKeyDown={e=>{ if(e.key==='Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229){ e.preventDefault(); addTask(); } }} />
+            <div style={{display:'flex', alignItems:'center', gap:6, flexWrap:'wrap'}}>
+              <div className="prio-btns">
+                {['A','B','C'].map(p => (
+                  <button key={p} className={`prio-btn${newPrio===p?` sel-${p.toLowerCase()}`:''}`} onClick={()=>setNewPrio(p)}>{p}</button>
+                ))}
+              </div>
+              <select value={newProj} onChange={e=>setNewProj(e.target.value)}
+                style={{border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', padding:'2px 6px', fontSize:11, background:'var(--surface)', color: newProj ? 'var(--text)' : 'var(--text-4)', fontFamily:'var(--font)', cursor:'pointer'}}>
+                <option value="">📁 프로젝트</option>
+                {projects.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+              <input type="date" value={newDeadline} onChange={e=>setNewDeadline(e.target.value)}
+                style={{border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', padding:'2px 5px', fontSize:11, background:'var(--surface)', color: newDeadline ? 'var(--text)' : 'var(--text-4)', fontFamily:'var(--font)', cursor:'pointer'}} />
+              <button className="btn btn-primary btn-sm" style={{marginLeft:'auto'}} onClick={addTask}>추가 ↵</button>
+            </div>
+          </div>
+          {urgent.length > 0 && (
+            <div className="alert alert-red">🔥 마감 임박 — {urgent.map(t=>t.title).join(', ')}</div>
+          )}
+          {stale.length > 0 && (
+            <div className="alert alert-amber">⏳ {stale[0].title} — 8일째 진행 중이에요</div>
+          )}
+          {doing.map(t => (
+            <TaskCard key={t.id} task={t} onStatus={setStatus} onDelete={deleteTask} onUpdate={updateTask} projects={projects} />
+          ))}
+          {todo.length > 0 && (
+            <>
+              <div style={{fontSize:10, color:'var(--text-4)', fontWeight:600, textTransform:'uppercase', letterSpacing:'.5px', paddingTop:4}}>대기 중 TODO ({todo.length})</div>
+              {todo.map(t => (
+                <div key={t.id} style={{display:'flex', alignItems:'center', gap:8, padding:'5px 4px', borderRadius:4, cursor:'pointer'}}
+                  onMouseOver={e=>e.currentTarget.style.background='var(--surface-2)'}
+                  onMouseOut={e=>e.currentTarget.style.background='transparent'}>
+                  <div style={{width:13, height:13, border:'1.5px solid var(--border-2)', borderRadius:3, flexShrink:0}} />
+                  <span style={{flex:1, fontSize:12, color:'var(--text-3)', overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis'}}>{t.title}</span>
+                  <span style={{fontSize:10, color:'var(--text-4)', flexShrink:0}}>{t.priority}</span>
+                  <button className="icon-btn" onClick={()=>setStatus(t.id,'DOING')} style={{fontSize:10}} title="진행으로">▶</button>
+                  <button className="icon-btn" onClick={()=>deleteTask(t.id)} style={{fontSize:10, color:'var(--red)', borderColor:'transparent'}} title="삭제">✕</button>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      </div>
+    ),
+    journal: (idx) => (
+      <div className="col" key="journal">
+        <div className="col-header">
+          <span style={{display:'flex', alignItems:'center'}}>
+            <ReorderBtns idx={idx} />
+            <span className="col-header-title">📝 오늘 기록</span>
+          </span>
+          <span className="save-status">{saveStatus}</span>
+        </div>
+        <div className="col-body" style={{padding:'12px 14px'}}>
+          <div style={{display:'flex', gap:6, marginBottom:8, alignItems:'center'}}>
+            <button className="btn btn-sm" onClick={()=>shiftDate(-1)} title="하루 전">← 어제</button>
+            <button className="btn btn-sm" onClick={()=>shiftDate(1)} title="하루 후">내일 →</button>
+            <span style={{fontSize:11, color:'var(--text-3)', marginLeft:6}}>{dateLabel(selectedDate)}</span>
+            {selectedDate !== TODAY && (
+              <button className="btn btn-sm" onClick={()=>setSelectedDate(TODAY)} style={{fontSize:10}}>오늘로</button>
+            )}
+            <button className="btn btn-primary btn-sm" style={{marginLeft:'auto'}} onClick={manualSave}>💾 저장</button>
+          </div>
+          <div style={{position:'relative', flex:1, display:'flex', flexDirection:'column'}}>
+          <textarea className="journal-textarea"
+            ref={journalRef}
+            value={journalText}
+            onChange={onJournalChange}
+            onKeyDown={onJournalKeyDown}
+            onClick={onJournalClick}
+            placeholder={`오늘 한 일, 회의 내용, 이슈 등을 자유롭게 기록하세요.\n\n팁:\n- 를 치고 엔터 → 다음 줄도 자동으로 리스트\n- [ ] 를 치고 엔터 → 체크박스 리스트\n#태그 로 분류 가능 (예: #보고서 #개발)\n⌘/Ctrl + 클릭으로 체크박스 토글`}
+          />
+          {tagSuggest && tagSuggest.tags.length > 0 && (
+            <div style={{position:'absolute', top:0, left:0, background:'var(--surface)', border:'1px solid var(--border)', borderRadius:6, boxShadow:'0 8px 24px rgba(0,0,0,.12)', padding:4, minWidth:160, zIndex:50}}>
+              <div style={{fontSize:9, color:'var(--text-4)', textTransform:'uppercase', letterSpacing:'.5px', padding:'4px 8px 2px'}}>태그 추천</div>
+              {tagSuggest.tags.map(t => (
+                <div key={t} onMouseDown={(e) => { e.preventDefault(); insertTag(t); }}
+                  style={{padding:'5px 8px', fontSize:12, cursor:'pointer', borderRadius:4, color:'var(--text-2)'}}
+                  onMouseOver={e => e.currentTarget.style.background='var(--surface-2)'}
+                  onMouseOut={e => e.currentTarget.style.background='transparent'}>
+                  <span style={{color:'var(--accent)', fontWeight:600}}>#{t.slice(0, tagSuggest.prefix.length)}</span>{t.slice(tagSuggest.prefix.length)}
+                </div>
+              ))}
+            </div>
+          )}
+          </div>
+          {(() => {
+            const tags = [...new Set((journalText.match(/#[^\s#]+/g) || []).map(t => t.slice(1)))];
+            if (tags.length === 0) return null;
+            return (
+              <div style={{display:'flex', flexWrap:'wrap', gap:4, paddingTop:8, marginTop:8, borderTop:'1px dashed var(--border)'}}>
+                <span style={{fontSize:10, color:'var(--text-4)', alignSelf:'center', marginRight:4}}>오늘의 태그</span>
+                {tags.map(t => (
+                  <span key={t} className="tag-chip"
+                    onClick={()=>setActiveTag(activeTag===t ? null : t)}
+                    style={{cursor:'pointer', background: activeTag===t ? 'var(--accent)' : undefined, color: activeTag===t ? '#fff' : undefined, borderColor: activeTag===t ? 'var(--accent)' : undefined}}>
+                    #{t}
+                  </span>
+                ))}
+              </div>
+            );
+          })()}
+          {activeTag && (() => {
+            // 모든 날짜에서 #activeTag 들어간 줄 수집
+            const re = new RegExp(`#${activeTag}(?![\\w\\uAC00-\\uD7A3])`, 'g');
+            const matches = [];
+            Object.entries(journals).forEach(([date, text]) => {
+              if (typeof text !== 'string') return;
+              text.split('\n').forEach((line, lineIdx) => {
+                if (re.test(line)) matches.push({date, line: line.trim(), lineIdx});
+                re.lastIndex = 0;
+              });
+            });
+            // 날짜 내림차순 (최근이 위에)
+            matches.sort((a,b) => b.date.localeCompare(a.date) || a.lineIdx - b.lineIdx);
+            return (
+              <div style={{marginTop:10, paddingTop:10, borderTop:'1px dashed var(--border)'}}>
+                <div style={{display:'flex', alignItems:'center', gap:6, marginBottom:6}}>
+                  <span style={{fontSize:11, fontWeight:600, color:'var(--text-2)'}}>#{activeTag}</span>
+                  <span style={{fontSize:10, color:'var(--text-4)'}}>{matches.length}건 · 모든 날짜</span>
+                  <button className="icon-btn" style={{marginLeft:'auto', fontSize:10}} onClick={()=>setActiveTag(null)}>✕ 닫기</button>
+                </div>
+                <div style={{display:'flex', flexDirection:'column', gap:4, maxHeight:200, overflowY:'auto'}}>
+                  {matches.length === 0 && (
+                    <div style={{fontSize:11, color:'var(--text-4)', padding:'6px 0'}}>이 태그가 들어간 줄이 없어요.</div>
+                  )}
+                  {matches.map((m, i) => {
+                    const isCurrent = m.date === selectedDate;
+                    const dl = (() => {
+                      if (m.date === TODAY) return '오늘';
+                      const [y,mo,d] = m.date.split('-').map(Number);
+                      return `${mo}/${d}`;
+                    })();
+                    return (
+                      <div key={i}
+                        onClick={()=>{ if (!isCurrent) setSelectedDate(m.date); }}
+                        style={{display:'flex', gap:8, padding:'5px 7px', borderRadius:4, cursor: isCurrent?'default':'pointer', background: isCurrent ? 'var(--accent-light)' : 'var(--surface-2)', border:'1px solid var(--border)'}}
+                        title={isCurrent ? '이 날 보는 중' : `${m.date} 로 이동`}>
+                        <span style={{fontSize:10, color: isCurrent?'var(--accent-text)':'var(--text-4)', fontWeight:600, flexShrink:0, minWidth:32}}>{dl}</span>
+                        <span style={{fontSize:11, color:'var(--text-2)', flex:1, lineHeight:1.4, wordBreak:'break-word'}}>{m.line}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      </div>
+    ),
+    stats: (idx) => (
+      <div className="col" key="stats" style={idx===colOrder.length-1?{borderRight:'none'}:undefined}>
+        <div className="col-header">
+          <span style={{display:'flex', alignItems:'center'}}>
+            <ReorderBtns idx={idx} />
+            <span className="col-header-title">📊 이번 주</span>
+          </span>
+        </div>
+        <div className="col-body">
+          <div className="stat-grid">
+            {[{n:doneWeek, l:'완료', c:'var(--green)'}, {n:`${Math.round(doneWeek/totalWeek*100)}%`, l:'완료율', c:'var(--text)'}, {n:doing.length, l:'진행중', c:'var(--accent)'}, {n:todo.length, l:'대기', c:'var(--text-3)'}].map((s,i)=>(
+              <div key={i} className="stat-card">
+                <div className="stat-num" style={{color:s.c}}>{s.n}</div>
+                <div className="stat-label">{s.l}</div>
+              </div>
+            ))}
+          </div>
+          <div>
+            <div style={{display:'flex', justifyContent:'space-between', marginBottom:5}}>
+              <span style={{fontSize:11, color:'var(--text-3)'}}>완료율</span>
+              <span style={{fontSize:11, color:'var(--green)', fontWeight:700}}>{Math.round(doneWeek/totalWeek*100)}%</span>
+            </div>
+            <div className="progress-bar">
+              <div className="progress-fill" style={{width:`${Math.round(doneWeek/totalWeek*100)}%`, background:'var(--green)'}} />
+            </div>
+          </div>
+          <div>
+            <div style={{fontSize:10, color:'var(--text-4)', fontWeight:600, textTransform:'uppercase', letterSpacing:'.5px', marginBottom:8}}>📈 주간 완료 추이 (평일)</div>
+            {/* 스파크라인 바 차트 — 최근 8주 */}
+            {(() => {
+              const weeks = [
+                {label:'2/24', count:3}, {label:'3/3', count:5}, {label:'3/10', count:2},
+                {label:'3/17', count:7}, {label:'3/24', count:4}, {label:'3/31', count:6},
+                {label:'4/7', count:8}, {label:'4/14', count:8},
+              ];
+              const max = Math.max(...weeks.map(w=>w.count));
+              return (
+                <div>
+                  <div style={{display:'flex', alignItems:'flex-end', gap:4, height:48, marginBottom:4}}>
+                    {weeks.map((w,i) => (
+                      <div key={i} style={{flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:2}}>
+                        <div style={{
+                          width:'100%', borderRadius:'2px 2px 0 0',
+                          height: `${Math.round((w.count/max)*44)}px`,
+                          background: i===weeks.length-1 ? 'var(--accent)' : 'var(--border-2)',
+                          minHeight:3, transition:'height .3s'
+                        }} />
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{display:'flex', gap:4}}>
+                    {weeks.map((w,i) => (
+                      <div key={i} style={{flex:1, fontSize:8, color: i===weeks.length-1?'var(--accent)':'var(--text-4)', textAlign:'center', overflow:'hidden'}}>{w.label}</div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+            {/* 평일 히트맵 (월~금) */}
+            <div style={{marginTop:10}}>
+              <div style={{fontSize:10, color:'var(--text-4)', fontWeight:600, letterSpacing:'.5px', marginBottom:5}}>🗓 최근 4주 평일</div>
+              <div style={{display:'flex', gap:6}}>
+                <div style={{display:'flex', flexDirection:'column', gap:3, paddingTop:1}}>
+                  {['월','화','수','목','금'].map(d=>(
+                    <div key={d} style={{fontSize:8, color:'var(--text-4)', height:10, lineHeight:'10px', textAlign:'right'}}>{d}</div>
+                  ))}
+                </div>
+                <div style={{display:'flex', gap:3}}>
+                  {Array.from({length:4}).map((_,w)=>(
+                    <div key={w} style={{display:'flex', flexDirection:'column', gap:3}}>
+                      {[3,2,1,2,3].map((lvl,d)=>{
+                        const adj = (lvl + w) % 4;
+                        return <div key={d} className={`heat-cell${adj?` heat-${Math.min(adj,3)}`:''}`} style={{width:10, height:10}} />;
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+          {done.length > 0 && (
+            <div>
+              <div style={{fontSize:10, color:'var(--text-4)', fontWeight:600, textTransform:'uppercase', letterSpacing:'.5px', marginBottom:4}}>오늘 완료</div>
+              {done.slice(0,3).map(t=>(
+                <div key={t.id} style={{fontSize:12, color:'var(--text-3)', padding:'3px 0', display:'flex', alignItems:'center', gap:6, textDecoration:'line-through'}}>
+                  <span style={{color:'var(--green)'}}>✓</span>{t.title}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    ),
+  };
+
+  // 컬럼 너비 상태 (px). null이면 기본값 사용. 마지막 컬럼은 자동으로 나머지를 채움.
+  const [colWidths, setColWidths] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('worklog.colWidths') || 'null');
+      if (saved && typeof saved === 'object') return saved;
+    } catch(e) {}
+    return {}; // {focus: 420, journal: 600, stats: 260}
+  });
+  useEffect(() => { localStorage.setItem('worklog.colWidths', JSON.stringify(colWidths)); }, [colWidths]);
+
+  const dashboardRef = useRef(null);
+  const dragStateRef = useRef(null);
+  const [draggingIdx, setDraggingIdx] = useState(null);
+
+  function startResize(idx, e) {
+    e.preventDefault();
+    const grid = dashboardRef.current;
+    if (!grid) return;
+    const cols = grid.querySelectorAll(':scope > .col');
+    const leftEl = cols[idx];
+    const rightEl = cols[idx+1];
+    if (!leftEl || !rightEl) return;
+    dragStateRef.current = {
+      idx, startX: e.clientX,
+      leftKey: visibleCols[idx], rightKey: visibleCols[idx+1],
+      leftStart: leftEl.getBoundingClientRect().width,
+      rightStart: rightEl.getBoundingClientRect().width,
+      isLastPair: idx + 1 === visibleCols.length - 1,
+    };
+    setDraggingIdx(idx);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', onResize);
+    window.addEventListener('mouseup', endResize);
+  }
+  function onResize(e) {
+    const s = dragStateRef.current;
+    if (!s) return;
+    const dx = e.clientX - s.startX;
+    const MIN = 200;
+    const newLeft = Math.max(MIN, s.leftStart + dx);
+    const newRight = Math.max(MIN, s.rightStart - dx);
+    // 양쪽 모두 MIN을 넘길 때만 반영
+    if (newLeft < MIN || newRight < MIN) return;
+    setColWidths(prev => {
+      const next = { ...prev, [s.leftKey]: newLeft };
+      // 마지막 컬럼이 아니면 오른쪽도 px로 고정
+      if (!s.isLastPair) next[s.rightKey] = newRight;
+      return next;
+    });
+  }
+  function endResize() {
+    dragStateRef.current = null;
+    setDraggingIdx(null);
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    window.removeEventListener('mousemove', onResize);
+    window.removeEventListener('mouseup', endResize);
+  }
+  function resetWidths() {
+    setColWidths({});
+  }
+
+  // grid-template-columns 계산
+  // 사용자가 지정한 폭: px / 그외: stats=260px, focus|journal=1fr (난임없이 차지)
+  // 마지막엔 더 이상 핸들이 안 따라오므로, 마지막 컬럼은 px 저장이 있어도 1fr로 먹으며 나머지 점유(reset 필요 시 한계)
+  // 다만 마지막 컬럼이 stats면 260을 기본값으로
+  function colTrack(k, isLast) {
+    if (isLast) {
+      // 마지막 컬럼은 난머지 차지—사용자가 px로 디둔 게 있으면 존중 (단 마지막이 stats면 260 기본)
+      if (colWidths[k]) return `${colWidths[k]}px`;
+      return k === 'stats' ? '260px' : '1fr';
+    }
+    if (colWidths[k]) return `${colWidths[k]}px`;
+    return k === 'stats' ? '260px' : '1fr';
+  }
+  const trackParts = [];
+  colOrder.forEach((k, i) => {
+    trackParts.push(colTrack(k, i === colOrder.length - 1));
+    if (i < colOrder.length - 1) trackParts.push('5px'); // resizer
+  });
+  const gridCols = trackParts.join(' ');
+
+  return (
+    <div ref={dashboardRef} className="dashboard-grid" style={{gridTemplateColumns: gridCols}}>
+      {colOrder.map((key, idx) => (
+        <React.Fragment key={key}>
+          {cols[key](idx)}
+          {idx < colOrder.length - 1 && (
+            <div
+              className={`col-resizer${draggingIdx===idx?' dragging':''}`}
+              onMouseDown={(e)=>startResize(idx, e)}
+              onDoubleClick={resetWidths}
+              title="드래그해서 너비 조절 · 더블클릭으로 초기화"
+            />
+          )}
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+
+function TaskCard({ task, onStatus, onDelete, onUpdate, projects = [] }) {
+  const [expanded, setExpanded] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(task);
+
+  function startEdit() {
+    setDraft({...task, note: task.note || ''});
+    setEditing(true);
+    setExpanded(true);
+  }
+  function saveEdit() {
+    const title = (draft.title || '').trim();
+    if (!title) return;
+    onUpdate && onUpdate(task.id, {
+      title,
+      priority: draft.priority,
+      project: draft.project || '',
+      deadline: draft.deadline || '',
+      note: (draft.note || '').trim(),
+    });
+    setEditing(false);
+  }
+  function cancelEdit() {
+    setDraft(task);
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <div className="task-card" style={{borderLeft:`3px solid ${draft.priority==='A'?'var(--prio-a)':draft.priority==='B'?'var(--prio-b)':'var(--border-2)'}`, background:'var(--surface-2)'}}>
+        <input autoFocus value={draft.title} onChange={e=>setDraft({...draft, title:e.target.value})}
+          onKeyDown={e=>{ if(e.key==='Enter' && !e.nativeEvent.isComposing && e.keyCode!==229){ e.preventDefault(); saveEdit(); } if(e.key==='Escape'){ cancelEdit(); } }}
+          style={{width:'100%', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', padding:'4px 6px', fontSize:13, fontFamily:'var(--font)', color:'var(--text)', background:'var(--surface)', outline:'none', fontWeight:600}} />
+        <div style={{display:'flex', alignItems:'center', gap:6, flexWrap:'wrap', marginTop:6}}>
+          <div className="prio-btns">
+            {['A','B','C'].map(p => (
+              <button key={p} className={`prio-btn${draft.priority===p?` sel-${p.toLowerCase()}`:''}`} onClick={()=>setDraft({...draft, priority:p})}>{p}</button>
+            ))}
+          </div>
+          <select value={draft.project || ''} onChange={e=>setDraft({...draft, project:e.target.value})}
+            style={{border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', padding:'2px 6px', fontSize:11, background:'var(--surface)', color: draft.project ? 'var(--text)' : 'var(--text-4)', fontFamily:'var(--font)', cursor:'pointer'}}>
+            <option value="">📁 프로젝트</option>
+            {projects.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+          <input type="date" value={draft.deadline || ''} onChange={e=>setDraft({...draft, deadline:e.target.value})}
+            style={{border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', padding:'2px 5px', fontSize:11, background:'var(--surface)', color: draft.deadline ? 'var(--text)' : 'var(--text-4)', fontFamily:'var(--font)', cursor:'pointer'}} />
+        </div>
+        <textarea value={draft.note || ''} onChange={e=>setDraft({...draft, note:e.target.value})}
+          placeholder="메모 (선택사항)..."
+          style={{width:'100%', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', padding:'4px 6px', fontSize:11, fontFamily:'var(--font)', color:'var(--text-2)', background:'var(--surface)', outline:'none', resize:'vertical', minHeight:36, marginTop:6}} />
+        <div className="task-card-actions" style={{marginTop:6}}>
+          <button className="icon-btn done" onClick={saveEdit}>✓ 저장</button>
+          <button className="icon-btn" onClick={cancelEdit}>취소</button>
+          <span style={{marginLeft:'auto', fontSize:9, color:'var(--text-4)'}}>⏎ 저장 · Esc 취소</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="task-card" style={{borderLeft:`3px solid ${task.priority==='A'?'var(--prio-a)':task.priority==='B'?'var(--prio-b)':'var(--border-2)'}`}}>
+      <div className="task-card-top">
+        <div style={{flex:1, cursor:'text'}} onDoubleClick={startEdit} title="더블클릭해서 편집">
+          <div className="task-card-title">{task.title}</div>
+          <div className="task-card-meta" style={{marginTop:4}}>
+            <span className={`badge-prio-${task.priority.toLowerCase()}`}>{task.priority}</span>
+            {task.project && <span style={{fontSize:10, color:'var(--text-4)'}}>📁 {task.project}</span>}
+            {task.deadline && <span style={{fontSize:10, color:isUrgent(task.deadline)?'var(--red)':'var(--text-4)'}}>📅 {fmt(task.deadline)}{isToday(task.deadline)?' (오늘!)':''}</span>}
+          </div>
+        </div>
+      </div>
+      {task.note && expanded && <div style={{fontSize:11, color:'var(--text-3)', background:'var(--surface-2)', borderRadius:3, padding:'4px 7px'}}>📌 {task.note}</div>}
+      <div className="task-card-actions">
+        <button className="icon-btn done" onClick={()=>onStatus(task.id,'DONE')}>✓ 완료</button>
+        <button className="icon-btn" onClick={()=>onStatus(task.id,'TODO')}>⏸ 대기</button>
+        {task.note && <button className="icon-btn" onClick={()=>setExpanded(!expanded)}>{expanded?'▲':'▼'} 메모</button>}
+        <button className="icon-btn" onClick={startEdit} title="편집">✏️ 편집</button>
+        <button className="icon-btn" style={{marginLeft:'auto', color:'var(--red)', borderColor:'transparent'}} onClick={()=>onDelete && onDelete(task.id)} title="삭제">✕</button>
+      </div>
+    </div>
+  );
+}
+
+/* ─── SearchModal ─── */
+function SearchModal({ tasks, onClose, onJumpDate }) {
+  const [q, setQ] = React.useState('');
+  const [activeTag, setActiveTag] = React.useState(null);
+  const inputRef = React.useRef(null);
+
+  React.useEffect(() => { inputRef.current && inputRef.current.focus(); }, []);
+
+  const query = (activeTag ? `#${activeTag}` : q).trim().toLowerCase();
+
+  const journalHits = !query ? [] : ALL_JOURNALS
+    .map(j => {
+      const idx = j.content.toLowerCase().indexOf(query);
+      if (idx === -1) return null;
+      const start = Math.max(0, idx - 30);
+      const end   = Math.min(j.content.length, idx + query.length + 60);
+      const snippet = (start > 0 ? '…' : '') + j.content.slice(start, end) + (end < j.content.length ? '…' : '');
+      return { ...j, snippet, idx };
+    })
+    .filter(Boolean);
+
+  const taskHits = !query ? [] : tasks.filter(t =>
+    t.title.toLowerCase().includes(query) ||
+    (t.note || '').toLowerCase().includes(query) ||
+    (t.project || '').toLowerCase().includes(query)
+  );
+
+  function highlight(text, q) {
+    if (!q) return text;
+    const re = new RegExp('(' + q.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&') + ')', 'gi');
+    const parts = text.split(re);
+    return parts.map((p, i) => re.test(p) ? <mark key={i}>{p}</mark> : <span key={i}>{p}</span>);
+  }
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()} style={{alignItems:'flex-start', paddingTop:80}}>
+      <div className="modal" style={{width:640, maxHeight:'70vh', display:'flex', flexDirection:'column'}}>
+        <div style={{padding:'14px 18px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', gap:10}}>
+          <span style={{fontSize:16, color:'var(--text-3)'}}>🔍</span>
+          <input ref={inputRef} value={q} onChange={e => { setQ(e.target.value); setActiveTag(null); }}
+            placeholder="일지·Task에서 검색...  (예: 보고서, #개발, 미팅)"
+            style={{flex:1, border:'none', outline:'none', background:'transparent', fontSize:14, color:'var(--text)', fontFamily:'var(--font)'}}
+          />
+          <span className="kbd" style={{fontSize:10, color:'var(--text-4)', border:'1px solid var(--border)', padding:'1px 5px', borderRadius:3}}>ESC</span>
+        </div>
+
+        {/* 자주 쓰는 태그 */}
+        {!query && (
+          <div style={{padding:'12px 18px', borderBottom:'1px solid var(--border)'}}>
+            <div style={{fontSize:10, fontWeight:600, color:'var(--text-4)', textTransform:'uppercase', letterSpacing:'.5px', marginBottom:8}}>자주 쓰는 태그</div>
+            <div style={{display:'flex', flexWrap:'wrap', gap:6}}>
+              {TAG_FREQ.map(t => (
+                <span key={t.tag} className="tag-chip lg" onClick={() => setActiveTag(t.tag)}>
+                  #{t.tag} <span style={{opacity:.6, fontSize:10}}>{t.count}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div style={{flex:1, overflow:'auto'}}>
+          {query && journalHits.length === 0 && taskHits.length === 0 && (
+            <div style={{padding:'40px 20px', textAlign:'center', fontSize:13, color:'var(--text-4)'}}>"{query}" 결과가 없어요</div>
+          )}
+
+          {journalHits.length > 0 && (
+            <div>
+              <div style={{padding:'10px 18px 6px', fontSize:10, fontWeight:700, color:'var(--text-4)', textTransform:'uppercase', letterSpacing:'.5px', background:'var(--surface-2)'}}>📝 일지 ({journalHits.length})</div>
+              {journalHits.map(j => (
+                <div key={j.date} className="search-result-row" onClick={() => { onJumpDate && onJumpDate(j.date); onClose(); }}>
+                  <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                    <span style={{fontSize:12, fontWeight:600, color:'var(--text-2)'}}>{j.date}</span>
+                    <span style={{fontSize:10, color:'var(--text-4)'}}>일지로 이동 →</span>
+                  </div>
+                  <div className="search-snippet">{highlight(j.snippet, query)}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {taskHits.length > 0 && (
+            <div>
+              <div style={{padding:'10px 18px 6px', fontSize:10, fontWeight:700, color:'var(--text-4)', textTransform:'uppercase', letterSpacing:'.5px', background:'var(--surface-2)'}}>✓ Task ({taskHits.length})</div>
+              {taskHits.map(t => (
+                <div key={t.id} className="search-result-row">
+                  <div style={{display:'flex', alignItems:'center', gap:8}}>
+                    <span className={`badge badge-${t.priority.toLowerCase()}`} style={{fontSize:10}}>{t.priority}</span>
+                    <span className={`badge badge-${t.status.toLowerCase()}`} style={{fontSize:10}}>{t.status}</span>
+                    <span style={{fontSize:13, color:'var(--text-2)', flex:1}}>{highlight(t.title, query)}</span>
+                  </div>
+                  {(t.project || t.note) && (
+                    <div className="search-snippet">
+                      {t.project && <span>📁 {highlight(t.project, query)}  </span>}
+                      {t.note && <span>📌 {highlight(t.note, query)}</span>}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div style={{padding:'8px 18px', borderTop:'1px solid var(--border)', fontSize:10, color:'var(--text-4)', display:'flex', gap:14}}>
+          <span><span className="kbd" style={{border:'1px solid var(--border)', padding:'1px 5px', borderRadius:3, marginRight:4}}>↑↓</span> 이동</span>
+          <span><span className="kbd" style={{border:'1px solid var(--border)', padding:'1px 5px', borderRadius:3, marginRight:4}}>Enter</span> 열기</span>
+          <span style={{marginLeft:'auto'}}>#태그로 필터링 가능</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── BriefingView ─── */
+function BriefingView({ tasks, dataVersion }) {
+  const STALE_DAYS = 7;
+
+  /* 백엔드 /api/brief 결과 (있으면 우선 사용) */
+  const [brief, setBrief] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    GET('/api/brief')
+      .then(b => { if (!cancelled) setBrief(b); })
+      .catch(_ => {});
+    return () => { cancelled = true; };
+  }, [dataVersion]);
+
+  function daysDiff(dateStr) {
+    const diff = new Date(TODAY) - new Date(dateStr+'T00:00:00');
+    return Math.floor(diff / 86400000);
+  }
+
+  /* 백엔드 결과가 있으면 그 목록을, 없으면 클라이언트 계산을 사용 */
+  const doing     = tasks.filter(t => t.status === 'DOING');
+  const urgent    = brief
+    ? brief.urgent.map(normalizeTask)
+    : tasks.filter(t => t.status !== 'DONE' && t.status !== 'CANCELLED' && t.deadline && t.deadline <= TODAY);
+  const stale     = brief
+    ? brief.stale.map(normalizeTask)
+    : tasks.filter(t => ['TODO','DOING'].includes(t.status) && daysDiff(t.updatedAt) >= STALE_DAYS);
+  const doneDone  = tasks.filter(t => t.status === 'DONE' && t.updatedAt === '2026-04-24');
+  const undone    = tasks.filter(t => ['TODO','DOING'].includes(t.status));
+
+  const prioIcon = p => ({ A:'🔴', B:'🟡', C:'⚪' }[p] || '⚪');
+  const deadlineLabel = d => {
+    if (!d) return '';
+    if (d === TODAY) return ' ← 오늘 마감!';
+    const tmrw = (() => {
+      const dt = new Date(); dt.setDate(dt.getDate()+1);
+      return dt.toISOString().slice(0,10);
+    })();
+    if (d === tmrw) return ' ← 내일 마감';
+    return ` ← ${d}`;
+  };
+
+  const Card = ({ children, style }) => (
+    <div style={{ background:'var(--surface)', border:'1px solid var(--border)', borderRadius:8, padding:'18px 20px', boxShadow:'var(--shadow)', ...style }}>
+      {children}
+    </div>
+  );
+  const SectionTitle = ({ children }) => (
+    <div style={{ fontSize:12, fontWeight:700, color:'var(--text-3)', textTransform:'uppercase', letterSpacing:'.5px', marginBottom:10 }}>{children}</div>
+  );
+  const Row = ({ children }) => (
+    <div style={{ display:'flex', alignItems:'flex-start', gap:8, padding:'5px 0', borderBottom:'1px solid var(--border)', fontSize:13 }}>{children}</div>
+  );
+
+  return (
+    <div style={{ padding:24, overflow:'auto', height:'100%', display:'flex', flexDirection:'column', gap:16 }}>
+
+      {/* 모닝 브리핑 */}
+      <Card>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
+          <div>
+            <div style={{ fontSize:15, fontWeight:700 }}>📅 모닝 브리핑</div>
+            <div style={{ fontSize:11, color:'var(--text-3)', marginTop:2 }}>{formatKoreanDate(TODAY)} · 09:00 자동 발송</div>
+          </div>
+          <span style={{ fontSize:11, background:'var(--green-light)', color:'var(--green)', padding:'3px 10px', borderRadius:99, fontWeight:600 }}>발송 완료</span>
+        </div>
+
+        {urgent.length > 0 && (
+          <div style={{ background:'var(--red-light)', borderRadius:6, padding:'10px 12px', marginBottom:12, fontSize:13, color:'var(--red)' }}>
+            <div style={{ fontWeight:700, marginBottom:6 }}>🔥 오늘 마감이라 DOING으로 옮겨뒀어요</div>
+            {urgent.map(t => (
+              <div key={t.id} style={{ paddingLeft:8 }}>{prioIcon(t.priority)} {t.title}</div>
+            ))}
+          </div>
+        )}
+
+        <SectionTitle>📌 오늘 포커스 ({doing.length}개{doing.length > 5 ? ' ⚠️ 좀 많아요' : ''})</SectionTitle>
+        {doing.length === 0
+          ? <div style={{ fontSize:13, color:'var(--text-3)', padding:'6px 0' }}>진행 중인 Task가 없어요. DOING으로 옮겨볼까요?</div>
+          : doing.map(t => (
+            <Row key={t.id}>
+              <span>{prioIcon(t.priority)}</span>
+              <span style={{ flex:1, color:'var(--text-2)' }}>{t.title}</span>
+              <span style={{ fontSize:11, color: t.deadline && t.deadline <= TODAY ? 'var(--red)' : 'var(--text-4)' }}>{deadlineLabel(t.deadline)}</span>
+            </Row>
+          ))
+        }
+
+        {doneDone.length > 0 && (
+          <div style={{ marginTop:12, fontSize:12, color:'var(--text-3)' }}>
+            ✅ 어제 완료: <strong>{doneDone.length}개</strong> 수고하셨어요! 👏
+          </div>
+        )}
+
+        {stale.length > 0 && (
+          <div style={{ marginTop:14 }}>
+            <SectionTitle>💬 혹시 이 Task들, 아직 진행 중인가요?</SectionTitle>
+            {stale.slice(0,3).map(t => (
+              <Row key={t.id}>
+                <span style={{ color:'var(--text-4)' }}>·</span>
+                <span style={{ flex:1, color:'var(--text-2)' }}>{t.title}</span>
+                <span style={{ fontSize:11, color:'var(--amber)' }}>{daysDiff(t.updatedAt)}일째</span>
+              </Row>
+            ))}
+            <div style={{ fontSize:12, color:'var(--text-3)', marginTop:8 }}>계속하실 거면 괜찮고, 완료·취소로 정리해두시면 깔끔해져요 😊</div>
+          </div>
+        )}
+      </Card>
+
+      {/* 퇴근 전 체크 */}
+      <Card>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
+          <div>
+            <div style={{ fontSize:15, fontWeight:700 }}>✋ 퇴근 전 체크</div>
+            <div style={{ fontSize:11, color:'var(--text-3)', marginTop:2 }}>오늘 17:30 예정</div>
+          </div>
+          <span style={{ fontSize:11, background:'var(--amber-light)', color:'var(--amber)', padding:'3px 10px', borderRadius:99, fontWeight:600 }}>대기 중</span>
+        </div>
+
+        <div style={{ fontSize:13, color:'var(--text-2)', lineHeight:1.9 }}>
+          <div>오늘 일지 작성 여부를 확인할게요.</div>
+          <div style={{ color:'var(--text-3)', fontSize:12, marginTop:4 }}>
+            미완료 Task <strong style={{ color:'var(--text-2)' }}>{undone.length}개</strong> · 오늘 마감 <strong style={{ color: urgent.length ? 'var(--red)' : 'var(--text-2)' }}>{urgent.length}개</strong>
+          </div>
+        </div>
+
+        <div style={{ marginTop:14 }}>
+          <SectionTitle>아직 못 끝낸 것들</SectionTitle>
+          {undone.slice(0,4).map(t => (
+            <Row key={t.id}>
+              <span>{prioIcon(t.priority)}</span>
+              <span style={{ flex:1, color:'var(--text-2)' }}>{t.title}</span>
+              <span className={`badge badge-${t.status.toLowerCase()}`} style={{ fontSize:10 }}>{t.status}</span>
+            </Row>
+          ))}
+          {undone.length > 4 && <div style={{ fontSize:12, color:'var(--text-4)', marginTop:6 }}>… 외 {undone.length-4}개 더</div>}
+        </div>
+        <div style={{ marginTop:12, fontSize:12, color:'var(--text-3)' }}>오늘 마무리할 것과 내일로 넘길 것 체크해두시면 좋아요!</div>
+      </Card>
+
+      {/* 다음 주간 브리핑 예고 */}
+      <Card style={{ background:'var(--surface-2)', border:'1px dashed var(--border-2)' }}>
+        <div style={{ fontSize:13, fontWeight:600, marginBottom:6 }}>📊 다음 주간 브리핑</div>
+        <div style={{ fontSize:12, color:'var(--text-3)', lineHeight:1.8 }}>
+          <div>월요일 (4/27) 09:00에 이번 주 회고 + 다음 주 브리핑이 자동 발송돼요.</div>
+          <div style={{ marginTop:6 }}>이번 주 마감: <strong>기획서 검토 (4/28)</strong> · <strong>월간 보고 (4/30)</strong></div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+/* ─── Gantt View ─── */
+function GanttView({ projFilter, onImport }) {
+  const [pFilter, setPFilter] = useState('전체');
+  const [prioFilter, setPrioFilter] = useState('전체');
+  const effectiveProj = projFilter !== '전체' ? projFilter : pFilter;
+
+  const filtered = GANTT_DATA.filter(t =>
+    (effectiveProj==='전체' || t.project===effectiveProj) &&
+    (prioFilter==='전체' || t.priority===prioFilter)
+  );
+
+  const totalCols = WEEKS.length;
+  const colW = 80;
+
+  return (
+    <div style={{display:'flex', flexDirection:'column', height:'100%', overflow:'hidden'}}>
+      <div className="gantt-filter-bar">
+        <span style={{fontSize:11, color:'var(--text-3)', fontWeight:600}}>프로젝트</span>
+        {['전체', ...PROJECTS].map(p=>(
+          <div key={p} className={`filter-chip${effectiveProj===p?' active':''}`} onClick={()=>setPFilter(p)}>{p}</div>
+        ))}
+        <div style={{width:1, height:16, background:'var(--border)', margin:'0 4px'}} />
+        <span style={{fontSize:11, color:'var(--text-3)', fontWeight:600}}>우선순위</span>
+        {['전체','A','B','C'].map(p=>(
+          <div key={p} className={`filter-chip${prioFilter===p?' active':''}`} onClick={()=>setPrioFilter(p)}>{p}</div>
+        ))}
+        <div style={{marginLeft:'auto', display:'flex', gap:8}}>
+          <button className="btn btn-sm" onClick={onImport}>📥 엑셀 가져오기</button>
+          <button className="btn btn-primary btn-sm">+ 항목 추가</button>
+        </div>
+      </div>
+
+      <div className="gantt-wrap">
+        {/* Names */}
+        <div className="gantt-names">
+          <div style={{height:36, borderBottom:'1px solid var(--border)', background:'var(--surface)', display:'flex', alignItems:'center', padding:'0 12px'}}>
+            <span style={{fontSize:11, color:'var(--text-4)', fontWeight:600}}>TASK</span>
+          </div>
+          {filtered.map(t => (
+            <div key={t.id} className="gantt-name-cell">
+              <div className="proj-dot" style={{background:PROJ_COLORS[t.project]}} />
+              <span className="gantt-name-text">{t.name}</span>
+              <span className={`badge-prio-${t.priority.toLowerCase()}`} style={{marginLeft:'auto'}}>{t.priority}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Chart area */}
+        <div className="gantt-chart-area" style={{position:'relative'}}>
+          <div style={{minWidth: totalCols * colW}}>
+            {/* Header */}
+            <div className="gantt-header-row">
+              {WEEKS.map((w,i) => (
+                <div key={i} className="gantt-header-cell" style={{minWidth:colW}}>{w}주</div>
+              ))}
+            </div>
+            {/* Rows */}
+            {filtered.map(t => {
+              const color = PROJ_COLORS[t.project];
+              const left = t.startWeek * colW;
+              const width = (t.endWeek - t.startWeek + 1) * colW - 6;
+              return (
+                <div key={t.id} className="gantt-row" style={{minWidth: totalCols*colW, position:'relative'}}>
+                  {/* grid lines */}
+                  {WEEKS.map((_,i)=>(
+                    <div key={i} style={{position:'absolute', left:i*colW, top:0, bottom:0, width:1, background:'var(--border)', opacity:.5}} />
+                  ))}
+                  {/* today line */}
+                  <div className="gantt-today" style={{left: TODAY_WEEK*colW, background:'var(--red)', opacity:.6}} />
+                  {/* bar */}
+                  <div className="gantt-bar" title={`${t.name} (${t.done}%)`}
+                    style={{left:left+3, width, background:color, opacity:.85}}>
+                    <div className="gantt-progress" style={{width:`${t.done}%`}} />
+                  </div>
+                  {t.done > 0 && <span style={{position:'absolute', left:left+6, top:'50%', transform:'translateY(-50%)', fontSize:9, color:'white', fontWeight:700, lineHeight:1}}>{t.done}%</span>}
+                </div>
+              );
+            })}
+            {/* Today label */}
+            <div style={{position:'absolute', top:0, left:TODAY_WEEK*colW-1, width:1.5, bottom:0, background:'var(--red)', opacity:.5, pointerEvents:'none'}}>
+              <span style={{position:'absolute', top:2, left:3, fontSize:9, color:'var(--red)', fontWeight:700, whiteSpace:'nowrap'}}>오늘 4/25</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="gantt-legend">
+        {Object.entries(PROJ_COLORS).filter(([k])=>k!=='전체').map(([p,c])=>(
+          <div key={p} className="legend-item">
+            <div className="legend-dot" style={{background:c}} />
+            {p}
+          </div>
+        ))}
+        <div style={{marginLeft:'auto', display:'flex', gap:12, alignItems:'center'}}>
+          <div className="legend-item">
+            <div className="legend-dot" style={{background:'rgba(180,180,180,.4)', border:'1px solid var(--border)'}} />진행률
+          </div>
+          <div className="legend-item" style={{color:'var(--red)'}}>▌ 오늘 기준선</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Weekly View ─── */
+function WeeklyView({ tasks, dataVersion }) {
+  const WEEK_DATES = ['2026-04-21','2026-04-22','2026-04-23','2026-04-24','2026-04-25'];
+  const DAYS_KO    = ['월','화','수','목','금','토','일'];
+
+  /* 백엔드 주간 통계 */
+  const [stats, setStats] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    GET(`/api/stats/weekly?start=2026-04-21&end=2026-04-27`)
+      .then(s => { if (!cancelled) setStats(s); })
+      .catch(_ => {});
+    return () => { cancelled = true; };
+  }, [dataVersion]);
+
+  /* 이번 주 통계 — 백엔드 우선, 폴백은 클라이언트 계산 */
+  const weekTasks  = tasks.filter(t => t.createdAt >= '2026-04-21' && t.createdAt <= '2026-04-27');
+  const total      = (stats && stats.total) ?? (weekTasks.length || 5);
+  const done       = (stats && stats.done) ?? (tasks.filter(t => t.status==='DONE' && t.updatedAt >= '2026-04-21').length || 3);
+  const active     = (stats && stats.active) ?? tasks.filter(t => ['TODO','DOING'].includes(t.status)).length;
+  const pct        = total ? Math.round(done / total * 100) : 0;
+
+  /* 히트맵 */
+  function heatLevel(c) { if(!c) return 0; if(c===1) return 1; if(c<=3) return 2; if(c<=6) return 3; return 4; }
+  const firstDate  = new Date(HEATMAP_DATA[0].date+'T00:00:00');
+  const startDow   = (firstDate.getDay()+6)%7; // 월=0
+  const padded     = [...Array(startDow).fill(null), ...HEATMAP_DATA];
+  while(padded.length%7!==0) padded.push(null);
+  const numWeeks   = padded.length/7;
+
+  const [tooltip, setTooltip] = React.useState(null);
+
+  /* 일지 내용 펼침 상태 */
+  const [expanded, setExpanded] = React.useState({});
+  const toggle = d => setExpanded(p => ({...p,[d]:!p[d]}));
+
+  const Card = ({children, style}) => (
+    <div style={{background:'var(--surface)', border:'1px solid var(--border)', borderRadius:8, padding:'16px 20px', boxShadow:'var(--shadow)', ...style}}>{children}</div>
+  );
+
+  return (
+    <div style={{padding:24, overflow:'auto', height:'100%', display:'flex', flexDirection:'column', gap:16}}>
+
+      {/* 통계 카드 3개 */}
+      <div style={{display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12}}>
+        {[
+          {n: total,        l:'이번 주 등록', c:'var(--text)'},
+          {n: done,         l:'완료',         c:'var(--green)'},
+          {n: `${pct}%`,    l:'완료율',       c:'var(--accent)'},
+        ].map((s,i) => (
+          <Card key={i} style={{textAlign:'center', padding:'18px 16px'}}>
+            <div style={{fontSize:32, fontWeight:700, color:s.c}}>{s.n}</div>
+            <div style={{fontSize:12, color:'var(--text-3)', marginTop:4}}>{s.l}</div>
+          </Card>
+        ))}
+      </div>
+
+      {/* 완료율 바 */}
+      <Card>
+        <div style={{display:'flex', justifyContent:'space-between', marginBottom:8}}>
+          <span style={{fontSize:13, fontWeight:600}}>이번 주 완료율</span>
+          <span style={{fontSize:12, color:'var(--green)', fontWeight:700}}>{pct}%</span>
+        </div>
+        <div style={{display:'flex', justifyContent:'space-between', marginBottom:8}}>
+          <span style={{fontSize:11, color:'var(--text-3)'}}>4/21 ~ 4/27</span>
+          <span style={{fontSize:11, color:'var(--text-3)'}}>진행/대기 {active}개</span>
+        </div>
+        <div className="progress-bar" style={{height:8}}>
+          <div className="progress-fill" style={{width:`${pct}%`, background:'var(--green)'}} />
+        </div>
+      </Card>
+
+      {/* 히트맵 */}
+      <Card>
+        <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14}}>
+          <span style={{fontSize:13, fontWeight:600}}>🌿 최근 35일 완료 현황</span>
+          <div style={{display:'flex', gap:4, alignItems:'center', fontSize:11, color:'var(--text-3)'}}>
+            <span>적음</span>
+            {[0,1,2,3,4].map(l=>(
+              <div key={l} className={`heat-cell heat-${l}`} style={{width:12, height:12, borderRadius:3}} />
+            ))}
+            <span>많음</span>
+          </div>
+        </div>
+        <div style={{display:'flex', gap:6, alignItems:'flex-start'}}>
+          {/* 요일 레이블 */}
+          <div style={{display:'flex', flexDirection:'column', gap:3, paddingTop:2}}>
+            {DAYS_KO.map(d=>(
+              <div key={d} style={{width:18, height:14, fontSize:10, color:'var(--text-3)', lineHeight:'14px', textAlign:'right'}}>{d}</div>
+            ))}
+          </div>
+          {/* 그리드 */}
+          <div style={{display:'grid', gridTemplateRows:'repeat(7,14px)', gridTemplateColumns:`repeat(${numWeeks},14px)`, gridAutoFlow:'column', gap:3}}>
+            {padded.map((d,i) => d ? (
+              <div key={i}
+                className={`heat-cell heat-${heatLevel(d.count)}`}
+                style={{width:14, height:14, borderRadius:3, cursor:'default'}}
+                onMouseEnter={e => setTooltip({text:`${d.date}  완료 ${d.count}개`, x:e.clientX, y:e.clientY})}
+                onMouseLeave={() => setTooltip(null)}
+              />
+            ) : (
+              <div key={i} style={{width:14, height:14, visibility:'hidden'}} />
+            ))}
+          </div>
+        </div>
+        {tooltip && (
+          <div style={{position:'fixed', left:tooltip.x+12, top:tooltip.y-28, background:'var(--text)', color:'var(--surface)', padding:'4px 10px', borderRadius:6, fontSize:12, pointerEvents:'none', zIndex:200, boxShadow:'var(--shadow-md)'}}>
+            {tooltip.text}
+          </div>
+        )}
+      </Card>
+
+      {/* 날짜별 일지 */}
+      <Card>
+        <div style={{fontSize:13, fontWeight:600, marginBottom:14}}>📝 이번 주 일지</div>
+        <div style={{display:'flex', flexDirection:'column', gap:1}}>
+          {WEEK_DATES.map(date => {
+            const j = WEEKLY_JOURNALS.find(j=>j.date===date);
+            const dow = DAYS_KO[new Date(date+'T00:00:00').getDay()-1] || '일';
+            const isOpen = expanded[date];
+            return (
+              <div key={date} style={{borderRadius:6, overflow:'hidden', border:'1px solid var(--border)', marginBottom:6}}>
+                <div
+                  onClick={() => toggle(date)}
+                  style={{display:'flex', alignItems:'center', gap:10, padding:'9px 14px', cursor:'pointer', background: isOpen ? 'var(--surface-2)' : 'transparent'}}
+                >
+                  <span style={{fontSize:11, color:'var(--text-4)', width:16}}>{dow}</span>
+                  <span style={{fontSize:12, fontWeight:600, color:'var(--text-2)'}}>{date}</span>
+                  {j ? <span style={{fontSize:11, background:'var(--accent-light)', color:'var(--accent-text)', borderRadius:99, padding:'1px 8px', marginLeft:'auto'}}>기록 있음</span>
+                     : <span style={{fontSize:11, color:'var(--text-4)', marginLeft:'auto'}}>기록 없음</span>}
+                  <span style={{fontSize:10, color:'var(--text-4)', marginLeft:4}}>{isOpen ? '▲' : '▼'}</span>
+                </div>
+                {isOpen && (
+                  <div style={{padding:'10px 14px 12px', borderTop:'1px solid var(--border)', background:'var(--surface)'}}>
+                    {j
+                      ? <pre style={{fontFamily:'var(--mono)', fontSize:12, whiteSpace:'pre-wrap', color:'var(--text-2)', lineHeight:1.8, margin:0}}>{j.content}</pre>
+                      : <span style={{fontSize:12, color:'var(--text-4)'}}>이 날 일지가 비어있어요.</span>
+                    }
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+/* ─── Task 정리 View ─── */
+function TaskCleanupView({ tasks, setTasks, onResume, refreshTasks }) {
+  const toast = useToast();
+  function daysDiff(dateStr) {
+    return Math.floor((new Date(TODAY) - new Date(dateStr+'T00:00:00')) / 86400000);
+  }
+
+  const stale      = tasks.filter(t => ['TODO','DOING'].includes(t.status) && daysDiff(t.updatedAt) >= 7);
+  const cancelled  = tasks.filter(t => t.status === 'CANCELLED');
+
+  async function setStatus(id, status) {
+    const task = tasks.find(t => t.id === id);
+    setTasks(prev => prev.map(t => t.id===id ? {...t, status, updatedAt:TODAY} : t));
+    try { await POST(`/tasks/${id}/status`, { status }); }
+    catch(e) { console.error(e); refreshTasks && refreshTasks(); }
+    if (status === 'DOING' && task) {
+      toast(`▶ "${task.title}" 진행 중으로 옮겼어요`, {
+        kind: 'success',
+        actionLabel: '대시보드 보기 →',
+        onAction: () => onResume && onResume(),
+      });
+    } else if (status === 'DONE' && task) {
+      toast(`✓ "${task.title}" 완료 처리됐어요`, { kind: 'success' });
+    }
+  }
+  async function deleteTask(id) {
+    setTasks(prev => prev.filter(t => t.id!==id));
+    try { await POST(`/tasks/${id}/delete`, {}); }
+    catch(e) { console.error(e); refreshTasks && refreshTasks(); }
+  }
+
+  const prioIcon = p => ({ A:'🔴', B:'🟡', C:'⚪' }[p] || '⚪');
+
+  const Section = ({title, subtitle, children, empty}) => (
+    <div style={{background:'var(--surface)', border:'1px solid var(--border)', borderRadius:8, boxShadow:'var(--shadow)', overflow:'hidden'}}>
+      <div style={{padding:'14px 20px 10px', borderBottom:'1px solid var(--border)'}}>
+        <div style={{fontSize:14, fontWeight:700}}>{title}</div>
+        {subtitle && <div style={{fontSize:11, color:'var(--text-3)', marginTop:2}}>{subtitle}</div>}
+      </div>
+      {children
+        ? <div style={{padding:'4px 0'}}>{children}</div>
+        : <div style={{padding:'20px', fontSize:13, color:'var(--text-4)', textAlign:'center'}}>{empty}</div>
+      }
+    </div>
+  );
+
+  const TaskRow = ({t, actions}) => (
+    <div style={{display:'flex', alignItems:'center', gap:10, padding:'10px 20px', borderBottom:'1px solid var(--border)'}}>
+      <span style={{fontSize:14}}>{prioIcon(t.priority)}</span>
+      <div style={{flex:1, minWidth:0}}>
+        <div style={{fontSize:13, color:'var(--text-2)', fontWeight:500}}>{t.title}</div>
+        <div style={{display:'flex', gap:8, fontSize:11, color:'var(--text-4)', marginTop:2, flexWrap:'wrap'}}>
+          {t.project && <span>📁 {t.project}</span>}
+          {t.deadline && <span>📅 {t.deadline}</span>}
+          {t.note && <span>📌 {t.note}</span>}
+          <span style={{color:'var(--amber)'}}>⏱ {daysDiff(t.updatedAt)}일째 미변경</span>
+        </div>
+      </div>
+      <div style={{display:'flex', gap:6, flexShrink:0}}>{actions}</div>
+    </div>
+  );
+
+  const Btn = ({onClick, children, color}) => (
+    <button className="btn btn-sm" onClick={onClick} style={color ? {color} : {}}>{children}</button>
+  );
+
+  return (
+    <div style={{padding:24, overflow:'auto', height:'100%', display:'flex', flexDirection:'column', gap:16}}>
+
+      {/* 요약 배너 */}
+      {(stale.length > 0 || cancelled.length > 0) && (
+        <div style={{background:'var(--amber-light)', border:'1px solid var(--amber)', borderRadius:8, padding:'12px 16px', fontSize:13, color:'var(--amber)', display:'flex', gap:16}}>
+          {stale.length > 0    && <span>⏳ 방치 Task <strong>{stale.length}개</strong></span>}
+          {cancelled.length > 0 && <span>✕ 취소됨 <strong>{cancelled.length}개</strong></span>}
+          <span style={{marginLeft:'auto', color:'var(--text-3)', fontSize:12}}>정리하면 브리핑이 더 깔끔해져요 😊</span>
+        </div>
+      )}
+
+      {/* 방치 Task */}
+      <Section
+        title="⏳ 방치된 Task"
+        subtitle={`7일 이상 상태 변경 없는 Task · ${stale.length}개`}
+        empty="방치된 Task가 없어요! 깔끔하네요 ✅"
+      >
+        {stale.length > 0 && stale.map(t => (
+          <TaskRow key={t.id} t={t} actions={<>
+            <Btn onClick={() => setStatus(t.id,'DONE')}   color="var(--green)">✓ 완료</Btn>
+            <Btn onClick={() => setStatus(t.id,'DOING')}>▶ 진행</Btn>
+            <Btn onClick={() => setStatus(t.id,'CANCELLED')} color="var(--red)">✕ 취소</Btn>
+          </>} />
+        ))}
+      </Section>
+
+      {/* CANCELLED */}
+      <Section
+        title="✕ 취소된 Task"
+        subtitle={`취소 처리된 Task · ${cancelled.length}개`}
+        empty="취소된 Task가 없어요."
+      >
+        {cancelled.length > 0 && cancelled.map(t => (
+          <div key={t.id} style={{display:'flex', alignItems:'center', gap:10, padding:'10px 20px', borderBottom:'1px solid var(--border)', opacity:.75}}>
+            <span style={{fontSize:14}}>{prioIcon(t.priority)}</span>
+            <div style={{flex:1, minWidth:0}}>
+              <div style={{fontSize:13, color:'var(--text-3)', textDecoration:'line-through'}}>{t.title}</div>
+              <div style={{display:'flex', gap:8, fontSize:11, color:'var(--text-4)', marginTop:2, flexWrap:'wrap'}}>
+                {t.project && <span>📁 {t.project}</span>}
+                {t.note    && <span>📌 {t.note}</span>}
+                <span>{t.updatedAt} 취소</span>
+              </div>
+            </div>
+            <div style={{display:'flex', gap:6, flexShrink:0}}>
+              <Btn onClick={() => setStatus(t.id,'TODO')}>↩ 복구</Btn>
+              <Btn onClick={() => deleteTask(t.id)} color="var(--red)">🗑 삭제</Btn>
+            </div>
+          </div>
+        ))}
+      </Section>
+    </div>
+  );
+}
+
+/* ─── ProjectManager Modal ─── */
+function ProjectManager({ projects, projectsRaw = [], setProjects, onClose, refreshProjects }) {
+  const [input, setInput] = useState('');
+  const [pickerFor, setPickerFor] = useState(null); // 색상 picker 열린 프로젝트 이름
+
+  /* 추천 색상 팔레트 */
+  const COLOR_SWATCHES = [
+    '#6366f1','#2563eb','#0ea5e9','#06b6d4','#10b981','#16a34a',
+    '#84cc16','#eab308','#f59e0b','#f97316','#ef4444','#dc2626',
+    '#ec4899','#d946ef','#a855f7','#7c3aed','#64748b','#475569'
+  ];
+
+  async function add() {
+    const name = input.trim();
+    if (!name || projects.includes(name)) return;
+    setProjects(prev => [...prev, name]); // 낙관적
+    setInput('');
+    try { await POST('/api/projects/add', { name }); refreshProjects && refreshProjects(); }
+    catch(e) { console.error(e); refreshProjects && refreshProjects(); }
+  }
+  async function remove(p) {
+    setProjects(prev => prev.filter(x => x !== p));
+    const raw = projectsRaw.find(x => x.name === p);
+    if (!raw) { refreshProjects && refreshProjects(); return; }
+    try { await POST(`/api/projects/${raw.id}/delete`, {}); refreshProjects && refreshProjects(); }
+    catch(e) { console.error(e); refreshProjects && refreshProjects(); }
+  }
+  async function changeColor(p, color) {
+    const raw = projectsRaw.find(x => x.name === p);
+    if (raw) PROJ_COLORS[p] = color; // 낙관적 (다음 렌더에서 반영)
+    setPickerFor(null);
+    if (!raw) return;
+    try { await POST(`/api/projects/${raw.id}/color`, { color }); refreshProjects && refreshProjects(); }
+    catch(e) { console.error(e); refreshProjects && refreshProjects(); }
+  }
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal" style={{width:380}}>
+        <div className="modal-header">
+          <div className="modal-title">📁 프로젝트 관리</div>
+          <button style={{background:'none',border:'none',cursor:'pointer',color:'var(--text-3)',fontSize:18}} onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body" style={{display:'flex',flexDirection:'column',gap:8}}>
+          <div style={{display:'flex',gap:6}}>
+            <input
+              style={{flex:1,border:'1px solid var(--border)',borderRadius:'var(--radius-sm)',padding:'6px 10px',fontSize:13,fontFamily:'var(--font)',background:'var(--surface)',color:'var(--text)',outline:'none'}}
+              placeholder="새 프로젝트 이름..."
+              value={input} onChange={e=>setInput(e.target.value)}
+              onKeyDown={e=>e.key==='Enter'&&add()}
+            />
+            <button className="btn btn-primary btn-sm" onClick={add}>+ 추가</button>
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:4,marginTop:4}}>
+            {projects.map((p,i) => {
+              const fallback = Object.values(PROJ_COLORS)[i % Object.values(PROJ_COLORS).length];
+              const color = (PROJ_COLORS[p]) || fallback;
+              const open = pickerFor === p;
+              return (
+                <div key={p} style={{display:'flex',flexDirection:'column',background:'var(--surface-2)',borderRadius:'var(--radius-sm)'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px'}}>
+                    <button
+                      onClick={() => setPickerFor(open ? null : p)}
+                      title="색상 변경"
+                      style={{width:14,height:14,borderRadius:'50%',background:color,border:'1px solid rgba(0,0,0,.1)',cursor:'pointer',padding:0}}
+                    />
+                    <span style={{flex:1,fontSize:13,color:'var(--text-2)'}}>{p}</span>
+                    <button className="icon-btn" style={{color:'var(--red)',borderColor:'transparent'}} onClick={()=>remove(p)}>✕</button>
+                  </div>
+                  {open && (
+                    <div style={{display:'flex',flexWrap:'wrap',gap:6,padding:'6px 10px 10px 10px',borderTop:'1px solid var(--border)'}}>
+                      {COLOR_SWATCHES.map(c => (
+                        <button
+                          key={c}
+                          onClick={() => changeColor(p, c)}
+                          title={c}
+                          style={{width:18,height:18,borderRadius:'50%',background:c,border: c===color ? '2px solid var(--text)' : '1px solid rgba(0,0,0,.1)',cursor:'pointer',padding:0}}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div className="modal-footer" style={{justifyContent:'flex-end'}}>
+          <button className="btn btn-primary" onClick={onClose}>완료</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+function ExcelModal({ onClose }) {
+  const [step, setStep] = useState(1);
+  const PREVIEW = [
+    {name:'Q2 기획서 제출', period:'4/1 ~ 4/8', color:'#2563eb', proj:'보고서'},
+    {name:'코드 리팩토링', period:'4/8 ~ 4/29', color:'#7c3aed', proj:'개발'},
+    {name:'팀 미팅 준비', period:'4/13 ~ 4/20', color:'#059669', proj:'팀 운영'},
+    {name:'월간 보고서', period:'4/20 ~ 5/4', color:'#2563eb', proj:'보고서'},
+    {name:'UI 고도화', period:'4/27 ~ 6/8', color:'#7c3aed', proj:'개발'},
+  ];
+
+  return (
+    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal">
+        <div className="modal-header">
+          <div className="modal-title">
+            {step===1&&'📥 엑셀 파일 가져오기'}
+            {step===2&&'📊 미리보기 — schedule.xlsx'}
+            {step===3&&'✅ 가져오기 완료'}
+          </div>
+          <div style={{display:'flex', alignItems:'center', gap:12}}>
+            <div className="step-indicator">
+              {[1,2,3].map(s=>(
+                <div key={s} className={`step-dot${s===step?' active':s<step?' done':''}`} />
+              ))}
+            </div>
+            <button style={{background:'none', border:'none', cursor:'pointer', color:'var(--text-3)', fontSize:18}} onClick={onClose}>×</button>
+          </div>
+        </div>
+
+        {step===1 && (
+          <>
+            <div className="modal-body" style={{display:'flex', flexDirection:'column', gap:12}}>
+              <div className="dropzone" onClick={()=>setStep(2)}>
+                <div className="dropzone-icon">📊</div>
+                <div style={{fontSize:14, fontWeight:600, color:'var(--text-2)', marginBottom:6}}>파일을 여기에 드래그하거나</div>
+                <button className="btn btn-primary">파일 선택</button>
+                <div style={{fontSize:11, color:'var(--text-4)', marginTop:8}}>.xlsx, .xls 지원</div>
+              </div>
+              <div style={{background:'var(--surface-2)', border:'1px solid var(--border)', borderRadius:6, padding:'10px 12px'}}>
+                <div style={{fontSize:11, fontWeight:600, color:'var(--text-2)', marginBottom:6}}>📌 엑셀 형식 안내</div>
+                <div style={{fontSize:12, color:'var(--text-3)', lineHeight:1.9}}>
+                  · <b>1행</b>: Task 이름 (열 헤더)<br/>
+                  · <b>A열</b>: 주차 라벨 (예: 4/1주, 4/8주)<br/>
+                  · <b>색칠된 셀</b> = 해당 주에 진행 중<br/>
+                  · 테마 색상 대신 <b>직접 RGB 색상</b>으로 저장 권장
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <span />
+              <button className="btn" onClick={onClose}>취소</button>
+            </div>
+          </>
+        )}
+
+        {step===2 && (
+          <>
+            <div className="modal-body" style={{padding:'14px 20px'}}>
+              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10}}>
+                <span style={{fontSize:12, color:'var(--text-3)'}}>schedule.xlsx · 5개 항목 감지됨</span>
+                <span className="badge badge-green">✓ 파싱 성공</span>
+              </div>
+              <table className="preview-table">
+                <thead>
+                  <tr><th>Task 이름</th><th>색상</th><th>기간</th><th>프로젝트</th></tr>
+                </thead>
+                <tbody>
+                  {PREVIEW.map((t,i)=>(
+                    <tr key={i}>
+                      <td style={{fontWeight:500}}>{t.name}</td>
+                      <td><div style={{width:20, height:14, background:t.color, borderRadius:2, display:'inline-block'}} /></td>
+                      <td style={{color:'var(--text-3)'}}>{t.period}</td>
+                      <td>
+                        <select className="proj-select" defaultValue={t.proj}>
+                          {PROJECTS.map(p=><option key={p}>{p}</option>)}
+                        </select>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div style={{marginTop:10, padding:'7px 10px', background:'var(--amber-light)', borderRadius:4, fontSize:11, color:'var(--amber)'}}>
+                ⚠ 테마 색상 셀이 감지됐어요. 해당 항목은 "개발"로 자동 매핑했어요.
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn" onClick={()=>setStep(1)}>← 뒤로</button>
+              <button className="btn btn-primary" onClick={()=>setStep(3)}>가져오기 →</button>
+            </div>
+          </>
+        )}
+
+        {step===3 && (
+          <>
+            <div className="modal-body" style={{textAlign:'center', padding:'28px 20px', display:'flex', flexDirection:'column', alignItems:'center', gap:12}}>
+              <div style={{fontSize:52}}>✅</div>
+              <div style={{fontSize:16, fontWeight:700}}>가져오기 완료!</div>
+              <div style={{fontSize:13, color:'var(--text-3)'}}>5개 Task를 전체 일정에 추가했어요</div>
+              <div style={{background:'var(--green-light)', border:'1px solid var(--green)', borderRadius:6, padding:'8px 16px', fontSize:12, color:'var(--green)', fontWeight:500}}>
+                보고서 2개 · 개발 2개 · 팀 운영 1개
+              </div>
+              <div style={{fontSize:11, color:'var(--text-4)'}}>다음번엔 같은 파일 업로드 시 자동으로 업데이트해요</div>
+            </div>
+            <div className="modal-footer">
+              <span />
+              <button className="btn btn-primary" onClick={onClose}>전체 일정 보러 가기 →</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Toast Context ─── */
+const ToastCtx = React.createContext(null);
+function useToast() { return React.useContext(ToastCtx); }
+
+function ToastProvider({ children }) {
+  const [toasts, setToasts] = React.useState([]);
+  const show = React.useCallback((msg, opts = {}) => {
+    const id = Date.now() + Math.random();
+    setToasts(t => [...t, { id, msg, ...opts }]);
+    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), opts.duration || 3500);
+  }, []);
+  return (
+    <ToastCtx.Provider value={show}>
+      {children}
+      <div className="toast-stack">
+        {toasts.map(t => (
+          <div key={t.id} className={`toast ${t.kind === 'success' ? 'toast-success' : ''}`}>
+            <span>{t.msg}</span>
+            {t.actionLabel && <span className="toast-action" onClick={() => { t.onAction && t.onAction(); }}>{t.actionLabel}</span>}
+          </div>
+        ))}
+      </div>
+    </ToastCtx.Provider>
+  );
+}
+
+/* ─── Shortcuts Modal ─── */
+function ShortcutsModal({ onClose }) {
+  const isMac = navigator.platform.toLowerCase().includes('mac');
+  const Mod = isMac ? '⌘' : 'Ctrl';
+  const rows = [
+    [`${Mod} + K`, '검색'],
+    [`${Mod} + N`, '빠른 추가에 포커스'],
+    [`${Mod} + J`, '저널에 포커스'],
+    [`${Mod} + ←`, '하루 전 저널'],
+    [`${Mod} + →`, '하루 후 저널'],
+    [`${Mod} + D`, '다크모드 토글'],
+    ['?', '이 도움말 열기/닫기'],
+    ['Esc', '모달 닫기'],
+  ];
+  return (
+    <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:100,display:'flex',alignItems:'center',justifyContent:'center'}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'var(--radius)',padding:'18px 22px',minWidth:340,boxShadow:'var(--shadow-lg)'}}>
+        <div style={{display:'flex',alignItems:'center',marginBottom:14}}>
+          <div style={{fontSize:14,fontWeight:700,color:'var(--text)'}}>⌨ 키보드 단축키</div>
+          <button className="icon-btn" style={{marginLeft:'auto'}} onClick={onClose}>✕</button>
+        </div>
+        <div style={{display:'flex',flexDirection:'column',gap:6}}>
+          {rows.map(([k,d]) => (
+            <div key={k} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'4px 0',fontSize:12}}>
+              <span style={{color:'var(--text-2)'}}>{d}</span>
+              <span style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--text-3)',border:'1px solid var(--border)',borderRadius:4,padding:'2px 8px',background:'var(--surface-2)'}}>{k}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── App ─── */
+function App() {
+  const [dark, setDark] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('worklog.dark') || 'false'); } catch(e) { return false; }
+  });
+  useEffect(() => { localStorage.setItem('worklog.dark', JSON.stringify(dark)); }, [dark]);
+  const [view, setView] = useState('dashboard');
+  const [tasks, setTasks] = useState(INIT_TASKS);
+  const [projFilter, setProjFilter] = useState('전체');
+  const [showExcel, setShowExcel] = useState(false);
+  const [projects, setProjects] = useState(PROJECTS);
+  const [projectsRaw, setProjectsRaw] = useState([]); // [{id,name,color}, ...]
+  const [showProjMgr, setShowProjMgr] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [dataVersion, setDataVersion] = useState(0); // ALL_JOURNALS/HEATMAP_DATA 갱신 트리거
+
+  /* 백엔드에서 task/projects 다시 불러오기 */
+  const refreshTasks = useCallback(async () => {
+    try {
+      const data = await GET('/api/tasks/all');
+      setTasks(data.map(normalizeTask));
+    } catch(e) { if (!__NO_BACKEND__) console.error('refreshTasks failed:', e); }
+  }, []);
+
+  const refreshProjects = useCallback(async () => {
+    try {
+      const data = await GET('/api/projects');
+      setProjectsRaw(data);
+      const names = data.map(p => p.name);
+      setProjects(names);
+      PROJECTS = names;
+      data.forEach(p => { PROJ_COLORS[p.name] = p.color; });
+    } catch(e) { if (!__NO_BACKEND__) console.error('refreshProjects failed:', e); }
+  }, []);
+
+  const refreshHeatmap = useCallback(async () => {
+    try {
+      const data = await GET('/api/heatmap?days=35');
+      HEATMAP_DATA = data;
+      setDataVersion(v => v+1);
+    } catch(e) { if (!__NO_BACKEND__) console.error('refreshHeatmap failed:', e); }
+  }, []);
+
+  /* 검색용 전체 일지 (90일치) — 검색 모달 열 때 fetch */
+  const refreshAllJournals = useCallback(async () => {
+    try {
+      const end = new Date();
+      const start = new Date(); start.setDate(start.getDate() - 90);
+      const data = await GET(`/api/journals/range?start=${start.toISOString().slice(0,10)}&end=${end.toISOString().slice(0,10)}`);
+      ALL_JOURNALS = data.filter(j => j.content && j.content.trim());
+      recomputeTagFreq();
+      setDataVersion(v => v+1);
+    } catch(e) { if (!__NO_BACKEND__) console.error('refreshAllJournals failed:', e); }
+  }, []);
+
+  /* MiniCalendar 점 — 현재 보이는 달의 일지 있는 날짜 fetch */
+  const [journalDates, setJournalDates] = useState({}); // { 'YYYY-MM-DD': true }
+  const refreshJournalDates = useCallback(async () => {
+    try {
+      const now = new Date();
+      // 현재 달 + 직전 달 + 다음 달까지 미리 가져와서 캐시
+      const months = [-1, 0, 1].map(off => {
+        const d = new Date(now.getFullYear(), now.getMonth() + off, 1);
+        return { year: d.getFullYear(), month: d.getMonth() + 1 };
+      });
+      const all = {};
+      for (const m of months) {
+        try {
+          const dates = await GET(`/api/journals/dates?year=${m.year}&month=${m.month}`);
+          (dates || []).forEach(d => { all[d] = true; });
+        } catch(_) {}
+      }
+      setJournalDates(all);
+    } catch(e) { if (!__NO_BACKEND__) console.error('refreshJournalDates failed:', e); }
+  }, []);
+
+  const bumpDataVersion = useCallback(() => setDataVersion(v => v+1), []);
+
+  /* 마운트 시 초기 데이터 로딩 */
+  useEffect(() => {
+    refreshTasks();
+    refreshProjects();
+    refreshHeatmap();
+    refreshAllJournals();
+    refreshJournalDates();
+  }, []);
+
+  /* 전역 단축키 */
+  useEffect(() => {
+    const onKey = (e) => {
+      // 입력창/textarea 안에서는 대부분 동작 안 함 (⌘K만 예외)
+      const tag = (e.target.tagName || '').toLowerCase();
+      const inField = ['input','textarea','select'].includes(tag) || e.target.isContentEditable;
+      const mod = e.metaKey || e.ctrlKey;
+
+      if (mod && e.key === 'k') { e.preventDefault(); setShowSearch(s => !s); return; }
+      if (e.key === 'Escape') {
+        if (showShortcuts) { setShowShortcuts(false); return; }
+        if (showSearch) { setShowSearch(false); return; }
+      }
+      if (inField) return;
+
+      if (e.key === '?' && !mod) { e.preventDefault(); setShowShortcuts(s => !s); return; }
+      if (mod && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); setDark(d => !d); return; }
+      if (mod && (e.key === 'n' || e.key === 'N')) {
+        e.preventDefault();
+        const inp = document.querySelector('.quick-input');
+        if (inp) inp.focus();
+        return;
+      }
+      if (mod && (e.key === 'j' || e.key === 'J')) {
+        e.preventDefault();
+        const ta = document.querySelector('.journal-textarea');
+        if (ta) ta.focus();
+        return;
+      }
+      if (mod && e.key === 'ArrowLeft') {
+        e.preventDefault();
+        setSelectedDate(prev => {
+          const [y,m,d] = prev.split('-').map(Number);
+          const dt = new Date(y, m-1, d); dt.setDate(dt.getDate()-1);
+          return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+        });
+        return;
+      }
+      if (mod && e.key === 'ArrowRight') {
+        e.preventDefault();
+        setSelectedDate(prev => {
+          const [y,m,d] = prev.split('-').map(Number);
+          const dt = new Date(y, m-1, d); dt.setDate(dt.getDate()+1);
+          return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+        });
+        return;
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showSearch, showShortcuts]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-dark', dark);
+  }, [dark]);
+
+  const [selectedDate, setSelectedDate] = useState(TODAY);
+
+  function handleCalendarSelect(date) {
+    setSelectedDate(date);
+    setView('dashboard');
+  }
+  const doingCount = tasks.filter(t=>t.status==='DOING').length;
+  const urgent = tasks.filter(t=>t.status!=='DONE'&&isUrgent(t.deadline));
+
+  return (
+    <div className="app">
+      <Sidebar view={view} setView={setView} dark={dark} setDark={setDark} projFilter={projFilter} setProjFilter={setProjFilter} projects={projects} onManageProjects={()=>setShowProjMgr(true)} onSelectDate={handleCalendarSelect} selectedDate={selectedDate} journalDates={journalDates} />
+      <div className="main">
+        <div className="main-header">
+          {view==='dashboard' && <>
+            <div>
+              <div className="header-title">📅 {formatKoreanDate(selectedDate)}</div>
+              <div className="header-sub">대시보드</div>
+            </div>
+            <div style={{display:'flex', gap:8, marginLeft:'auto', alignItems:'center'}}>
+              <div className="search-bar" onClick={()=>setShowSearch(true)} style={{cursor:'pointer'}}>
+                <span style={{fontSize:12, color:'var(--text-4)'}}>🔍</span>
+                <span style={{flex:1, fontSize:12, color:'var(--text-4)'}}>일지·Task 검색...</span>
+                <span className="kbd">{MOD_LABEL}K</span>
+              </div>
+              <button className="icon-btn" onClick={()=>setShowShortcuts(true)} title="키보드 단축키 (?)" style={{fontSize:12, padding:'4px 8px'}}>?</button>
+              {urgent.length>0 && <span className="badge badge-red">🔥 마감 {urgent.length}개</span>}
+              <span className="badge badge-blue">DOING {doingCount}/5</span>
+            </div>
+          </>}
+          {view==='briefing' && <>
+            <div>
+              <div className="header-title">📋 브리핑</div>
+              <div className="header-sub">{formatKoreanDate(TODAY)}</div>
+            </div>
+            <div style={{marginLeft:'auto'}} />
+          </>}
+          {view==='gantt' && <>
+            <div>
+              <div className="header-title">📅 전체 일정</div>
+              <div className="header-sub">2026년 4월 · {GANTT_DATA.length}개 항목</div>
+            </div>
+            <div style={{marginLeft:'auto'}} />
+          </>}
+          {view==='weekly' && <>
+            <div>
+              <div className="header-title">📊 주간 리포트</div>
+              <div className="header-sub">4/21 ~ 4/27</div>
+            </div>
+            <div style={{display:'flex', gap:6, marginLeft:'auto'}}>
+              <button className="btn btn-sm">← 이전 주</button>
+              <button className="btn btn-sm">다음 주 →</button>
+            </div>
+          </>}
+          {view==='cleanup' && <>
+            <div>
+              <div className="header-title">🧹 Task 정리</div>
+              <div className="header-sub">방치 Task와 취소된 Task를 정리하세요</div>
+            </div>
+            <div style={{marginLeft:'auto'}} />
+          </>}
+        </div>
+        <div className="main-body">
+          {view==='dashboard' && <Dashboard tasks={tasks} setTasks={setTasks} projFilter={projFilter} projects={projects} selectedDate={selectedDate} setSelectedDate={setSelectedDate} refreshTasks={refreshTasks} dataVersion={dataVersion} bumpDataVersion={bumpDataVersion} journalDates={journalDates} refreshJournalDates={refreshJournalDates} />}
+          {view==='briefing' && <BriefingView tasks={tasks} dataVersion={dataVersion} />}
+          {view==='gantt' && <GanttView projFilter={projFilter} onImport={()=>setShowExcel(true)} />}
+          {view==='weekly' && <WeeklyView tasks={tasks} dataVersion={dataVersion} />}
+          {view==='cleanup' && <TaskCleanupView tasks={tasks} setTasks={setTasks} onResume={()=>setView('dashboard')} refreshTasks={refreshTasks} />}
+        </div>
+      </div>
+      {showExcel && <ExcelModal onClose={()=>setShowExcel(false)} />}
+      {showProjMgr && <ProjectManager projects={projects} projectsRaw={projectsRaw} setProjects={setProjects} refreshProjects={refreshProjects} onClose={()=>setShowProjMgr(false)} />}
+      {showSearch && <SearchModal tasks={tasks} onClose={()=>setShowSearch(false)} onJumpDate={(d)=>{ setSelectedDate(d); setView('dashboard'); }} dataVersion={dataVersion} />}
+      {showShortcuts && <ShortcutsModal onClose={()=>setShowShortcuts(false)} />}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<ToastProvider><App /></ToastProvider>);
+</script>
+<div id="root"></div>
+</body>
+</html>

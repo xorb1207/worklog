@@ -1,0 +1,1892 @@
+<!DOCTYPE html>
+<html lang="ko" id="html-root" data-dark="false">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WorkLog</title>
+  <!--
+    폐쇄망 사용 시: 아래 CDN 파일들을 로컬에 다운로드 후 경로 변경
+      react.production.min.js  →  /static/js/react.min.js
+      react-dom.production.min.js  →  /static/js/react-dom.min.js
+      babel.min.js  →  /static/js/babel.min.js
+    폰트도 /static/fonts/ 에 넣고 @font-face 로 선언
+  -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- SheetJS: Excel/CSV 파싱 (폐쇄망 시 로컬 다운로드) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+  <style>
+    /* ── Design Tokens ──────────────────────────────────────────────────────── */
+    :root {
+      --bg:           #f7f6f3;
+      --surface:      #ffffff;
+      --surface-2:    #f0efe9;
+      --border:       #e2e0d9;
+      --text:         #1a1917;
+      --text-2:       #57534e;
+      --text-3:       #a8a29e;
+      --accent:       #2563eb;
+      --accent-hover: #1d4ed8;
+      --accent-light: #eff6ff;
+      --green:        #16a34a;
+      --green-light:  #dcfce7;
+      --red:          #dc2626;
+      --amber:        #d97706;
+      --sidebar-w:    176px;
+      --radius:       8px;
+      --radius-lg:    12px;
+      --shadow:       0 1px 3px rgba(0,0,0,.08);
+      --shadow-md:    0 4px 16px rgba(0,0,0,.12);
+      --font:         'Noto Sans KR', system-ui, sans-serif;
+      --font-mono:    'JetBrains Mono', 'Menlo', 'Consolas', monospace;
+      --transition:   .15s ease;
+    }
+    [data-dark="true"] {
+      --bg:           #0f0e0d;
+      --surface:      #1a1917;
+      --surface-2:    #232220;
+      --border:       #2c2b28;
+      --text:         #e7e5e0;
+      --text-2:       #a8a29e;
+      --text-3:       #57534e;
+      --accent-light: #1e3a5f;
+      --green-light:  #14532d;
+    }
+
+    /* ── Reset ──────────────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.5;
+      transition: background var(--transition), color var(--transition);
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    #root { display: flex; height: 100vh; overflow: hidden; }
+
+    /* ── Scrollbar ──────────────────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+
+    /* ── Sidebar ────────────────────────────────────────────────────────────── */
+    .sidebar {
+      width: var(--sidebar-w);
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      padding: 12px 8px 12px;
+    }
+    .logo {
+      font-weight: 700;
+      font-size: 15px;
+      color: var(--accent);
+      padding: 4px 8px 12px;
+      letter-spacing: -.3px;
+      flex-shrink: 0;
+    }
+    .sidebar-sep { height: 1px; background: var(--border); margin: 6px 0; flex-shrink: 0; }
+
+    /* ── Mini Calendar ──────────────────────────────────────────────────────── */
+    .mini-cal { padding: 2px; margin-bottom: 4px; }
+    .mini-cal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      font-weight: 600;
+      margin-bottom: 5px;
+      padding: 0 2px;
+    }
+    .mini-cal-nav {
+      cursor: pointer;
+      color: var(--text-3);
+      padding: 2px 5px;
+      border-radius: 4px;
+      border: none;
+      background: transparent;
+      font-size: 12px;
+      line-height: 1;
+    }
+    .mini-cal-nav:hover { background: var(--surface-2); color: var(--text); }
+    .mini-cal-grid {
+      display: grid;
+      grid-template-columns: 18px repeat(7, 1fr);
+      gap: 1px;
+    }
+    .mini-cal-dow, .mini-cal-wn {
+      font-size: 9px;
+      color: var(--text-3);
+      text-align: center;
+      padding: 1px 0;
+    }
+    .mini-cal-day {
+      font-size: 10px;
+      text-align: center;
+      padding: 2px 1px;
+      border-radius: 3px;
+      cursor: pointer;
+      color: var(--text-2);
+      position: relative;
+      line-height: 1.4;
+    }
+    .mini-cal-day:hover { background: var(--surface-2); }
+    .mini-cal-day.today { background: var(--accent); color: white; font-weight: 700; border-radius: 4px; }
+    .mini-cal-day.has-log::after {
+      content: '';
+      width: 3px; height: 3px;
+      background: var(--green);
+      border-radius: 50%;
+      position: absolute;
+      bottom: 0px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+    .mini-cal-day.today.has-log::after { background: rgba(255,255,255,.7); }
+
+    /* ── Nav ────────────────────────────────────────────────────────────────── */
+    .nav-label {
+      font-size: 9px;
+      font-weight: 700;
+      color: var(--text-3);
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      padding: 6px 8px 3px;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 8px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--text-2);
+      transition: background var(--transition), color var(--transition);
+      user-select: none;
+    }
+    .nav-item:hover { background: var(--surface-2); color: var(--text); }
+    .nav-item.active { background: var(--accent-light); color: var(--accent); font-weight: 600; }
+
+    /* ── Project list ───────────────────────────────────────────────────────── */
+    .project-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: var(--radius);
+      font-size: 11px;
+      color: var(--text-2);
+    }
+    .project-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+    /* ── Dark Toggle ────────────────────────────────────────────────────────── */
+    .dark-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 8px;
+      font-size: 11px;
+      color: var(--text-3);
+      cursor: pointer;
+      border-radius: var(--radius);
+    }
+    .dark-toggle:hover { background: var(--surface-2); }
+    .toggle-sw { width: 28px; height: 15px; background: var(--border); border-radius: 99px; position: relative; transition: background var(--transition); }
+    .toggle-sw.on { background: var(--accent); }
+    .toggle-thumb { width: 11px; height: 11px; background: white; border-radius: 50%; position: absolute; top: 2px; left: 2px; transition: left var(--transition); box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+    .toggle-sw.on .toggle-thumb { left: 15px; }
+
+    /* ── Main ───────────────────────────────────────────────────────────────── */
+    .main { flex: 1; overflow-y: auto; padding: 20px 24px; background: var(--bg); }
+    .page-title {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* ── Cards ──────────────────────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    .card-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-2);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    /* ── Task Cards ─────────────────────────────────────────────────────────── */
+    .task-card {
+      display: flex;
+      align-items: flex-start;
+      gap: 0;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .task-card:last-child { border-bottom: none; }
+    .task-pbar { width: 3px; align-self: stretch; border-radius: 2px; flex-shrink: 0; margin-right: 8px; min-height: 32px; }
+    .task-body { flex: 1; min-width: 0; }
+    .task-title { font-size: 13px; font-weight: 500; color: var(--text); word-break: break-word; }
+    .task-title.done { text-decoration: line-through; color: var(--text-3); font-weight: 400; }
+    .task-meta { display: flex; align-items: center; gap: 5px; margin-top: 2px; flex-wrap: wrap; }
+    .badge {
+      font-size: 10px;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-weight: 600;
+      letter-spacing: .2px;
+    }
+    .badge-a { background: #fee2e2; color: #dc2626; }
+    .badge-b { background: #fef3c7; color: #d97706; }
+    .badge-c { background: #f3f4f6; color: #6b7280; }
+    .badge-todo { background: var(--surface-2); color: var(--text-3); }
+    .badge-doing { background: #eff6ff; color: #2563eb; }
+    .badge-done { background: #dcfce7; color: #16a34a; }
+    .badge-cancelled { background: #f3f4f6; color: #9ca3af; }
+    [data-dark="true"] .badge-a { background: #450a0a; color: #fca5a5; }
+    [data-dark="true"] .badge-b { background: #451a03; color: #fde68a; }
+    [data-dark="true"] .badge-c { background: #1f2937; color: #9ca3af; }
+    [data-dark="true"] .badge-doing { background: #1e3a5f; color: #93c5fd; }
+    [data-dark="true"] .badge-done { background: #14532d; color: #86efac; }
+    .task-actions { display: flex; gap: 3px; align-items: center; flex-shrink: 0; }
+
+    /* ── Buttons ────────────────────────────────────────────────────────────── */
+    .btn {
+      padding: 5px 12px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-2);
+      font-size: 12px;
+      cursor: pointer;
+      font-family: var(--font);
+      transition: background var(--transition), border-color var(--transition);
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
+    }
+    .btn:hover { background: var(--surface-2); }
+    .btn-primary { background: var(--accent); border-color: var(--accent); color: white; }
+    .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+    .btn-sm { padding: 3px 8px; font-size: 11px; }
+    .btn-icon { padding: 4px 6px; min-width: 26px; justify-content: center; }
+    .btn-danger { color: var(--red); }
+    .btn-danger:hover { background: #fee2e2; border-color: #fca5a5; }
+    [data-dark="true"] .btn-danger:hover { background: #450a0a; border-color: #7f1d1d; }
+
+    /* ── Inputs ─────────────────────────────────────────────────────────────── */
+    input, select, textarea {
+      width: 100%;
+      padding: 7px 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 13px;
+      outline: none;
+      transition: border-color var(--transition);
+    }
+    input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+    textarea { resize: vertical; }
+    input[type="date"]::-webkit-calendar-picker-indicator { opacity: .5; cursor: pointer; }
+
+    /* ── Alerts ─────────────────────────────────────────────────────────────── */
+    .alert { display: flex; gap: 10px; padding: 10px 14px; border-radius: var(--radius); margin-bottom: 12px; font-size: 13px; }
+    .alert-red { background: #fee2e2; color: #991b1b; }
+    .alert-amber { background: #fef3c7; color: #92400e; }
+    [data-dark="true"] .alert-red { background: #450a0a; color: #fca5a5; }
+    [data-dark="true"] .alert-amber { background: #451a03; color: #fde68a; }
+
+    /* ── Dashboard 3-col ────────────────────────────────────────────────────── */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 260px;
+      gap: 14px;
+      align-items: start;
+    }
+    @media (max-width: 1150px) {
+      .dashboard-grid { grid-template-columns: 1fr 1fr; }
+      .dashboard-stats { display: none; }
+    }
+
+    /* ── Quick Add ──────────────────────────────────────────────────────────── */
+    .quick-add {
+      background: var(--surface-2);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      margin-bottom: 10px;
+    }
+    .priority-btn {
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: background var(--transition);
+    }
+    .pb-A { background: #fee2e2; color: #dc2626; }
+    .pb-B { background: #fef3c7; color: #d97706; }
+    .pb-C { background: #f3f4f6; color: #6b7280; }
+    .pb-A.sel { background: #dc2626; color: white; border-color: #dc2626; }
+    .pb-B.sel { background: #d97706; color: white; border-color: #d97706; }
+    .pb-C.sel { background: #6b7280; color: white; border-color: #6b7280; }
+
+    /* ── Heatmap ────────────────────────────────────────────────────────────── */
+    .heat-cell { width: 12px; height: 12px; border-radius: 3px; }
+    .heat-0 { background: var(--surface-2); }
+    .heat-1 { background: #bbf7d0; }
+    .heat-2 { background: #4ade80; }
+    .heat-3 { background: #16a34a; }
+    .heat-4 { background: #166534; }
+    [data-dark="true"] .heat-1 { background: #14532d; }
+    [data-dark="true"] .heat-2 { background: #15803d; }
+    [data-dark="true"] .heat-3 { background: #16a34a; }
+    [data-dark="true"] .heat-4 { background: #4ade80; }
+
+    /* ── Progress bar ───────────────────────────────────────────────────────── */
+    .progress-bar { height: 8px; background: var(--surface-2); border-radius: 99px; overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 99px; background: var(--green); transition: width .5s ease; }
+
+    /* ── Gantt ──────────────────────────────────────────────────────────────── */
+    .gantt-row { display: flex; align-items: center; border-bottom: 1px solid var(--border); min-height: 42px; }
+    .gantt-title-col { width: 200px; flex-shrink: 0; padding: 4px 8px; }
+    .gantt-bars { flex: 1; position: relative; display: flex; min-width: 0; }
+    .gantt-week-col { flex: 1; border-left: 1px solid var(--border); min-height: 42px; }
+    .gantt-bar {
+      position: absolute;
+      height: 22px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      padding: 0 6px;
+      font-size: 10px;
+      color: white;
+      overflow: hidden;
+      white-space: nowrap;
+      top: 10px;
+      z-index: 1;
+    }
+    .gantt-today-line { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--red); z-index: 5; opacity: .7; }
+
+    /* ── Filter chips ───────────────────────────────────────────────────────── */
+    .chip {
+      padding: 4px 10px;
+      border-radius: 99px;
+      font-size: 12px;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      background: var(--surface);
+      color: var(--text-2);
+      transition: all var(--transition);
+      white-space: nowrap;
+    }
+    .chip:hover { background: var(--surface-2); }
+    .chip.active { background: var(--accent); border-color: var(--accent); color: white; }
+
+    /* ── Modal ──────────────────────────────────────────────────────────────── */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.45);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal {
+      background: var(--surface);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      width: 440px;
+      max-width: 92vw;
+      box-shadow: var(--shadow-md);
+    }
+    .modal-title { font-size: 15px; font-weight: 700; margin-bottom: 16px; }
+
+    /* ── Toast ──────────────────────────────────────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(16px);
+      background: var(--text);
+      color: var(--bg);
+      padding: 8px 20px;
+      border-radius: 99px;
+      font-size: 13px;
+      font-weight: 500;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .2s ease, transform .2s ease;
+      z-index: 9999;
+      white-space: nowrap;
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* ── Utility ────────────────────────────────────────────────────────────── */
+    .flex { display: flex; }
+    .flex-col { flex-direction: column; }
+    .items-center { align-items: center; }
+    .justify-between { justify-content: space-between; }
+    .justify-end { justify-content: flex-end; }
+    .gap4 { gap: 4px; } .gap8 { gap: 8px; } .gap12 { gap: 12px; }
+    .mt4 { margin-top: 4px; } .mt8 { margin-top: 8px; } .mt12 { margin-top: 12px; }
+    .mb8 { margin-bottom: 8px; } .mb12 { margin-bottom: 12px; }
+    .w-full { width: 100%; }
+    .text-sm { font-size: 12px; } .text-xs { font-size: 11px; }
+    .text-2 { color: var(--text-2); } .text-3 { color: var(--text-3); }
+    .fw600 { font-weight: 600; } .fw700 { font-weight: 700; }
+    .divider { height: 1px; background: var(--border); margin: 8px 0; }
+    .line-through { text-decoration: line-through; }
+    .overflow-hidden { overflow: hidden; }
+    .text-ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .stat-num { font-size: 30px; font-weight: 700; line-height: 1.1; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <div id="toast"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback, useMemo, Fragment } = React;
+
+    /* ── Toast ──────────────────────────────────────────────────────────────── */
+    function showToast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      clearTimeout(el._timer);
+      el._timer = setTimeout(() => el.classList.remove('show'), 2200);
+    }
+
+    /* ── API helpers ────────────────────────────────────────────────────────── */
+    async function POST(url, body) {
+      let r;
+      try {
+        r = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+      } catch (e) {
+        showToast('❌ 네트워크 오류 — 서버가 실행 중인지 확인하세요');
+        console.error('POST fetch failed', url, e);
+        throw e;
+      }
+      if (!r.ok) {
+        const msg = `❌ 오류 ${r.status} (${url})`;
+        showToast(msg);
+        console.error(msg);
+        throw new Error(msg);
+      }
+      return r.json();
+    }
+    async function GET(url) {
+      let r;
+      try {
+        r = await fetch(url);
+      } catch (e) {
+        console.error('GET fetch failed', url, e);
+        throw e;
+      }
+      if (!r.ok) throw new Error(`GET ${url} → ${r.status}`);
+      return r.json();
+    }
+
+    /* ── Date utils ─────────────────────────────────────────────────────────── */
+    const todayStr = () => new Date().toISOString().slice(0, 10);
+
+    function addDays(dateStr, n) {
+      const d = new Date(dateStr + 'T00:00:00');
+      d.setDate(d.getDate() + n);
+      return d.toISOString().slice(0, 10);
+    }
+
+    function weekStartOf(dateStr) {
+      const d = new Date(dateStr + 'T00:00:00');
+      const dow = (d.getDay() + 6) % 7; // Mon=0
+      return addDays(dateStr, -dow);
+    }
+
+    function isoWeekNum(dateStr) {
+      const d = new Date(dateStr + 'T00:00:00');
+      d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
+      const w1 = new Date(d.getFullYear(), 0, 4);
+      return 1 + Math.round(((d - w1) / 86400000 - 3 + (w1.getDay() + 6) % 7) / 7);
+    }
+
+    function formatKO(dateStr) {
+      if (!dateStr) return '';
+      const d = new Date(dateStr + 'T00:00:00');
+      return d.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' });
+    }
+
+    const PRIORITY_COLOR = { A: '#dc2626', B: '#d97706', C: '#9ca3af' };
+    const DOW_KO = ['월', '화', '수', '목', '금', '토', '일'];
+    const STATUS_MSG = { DONE: '완료! ✓', DOING: '진행 중으로', TODO: '대기로', CANCELLED: '취소됨' };
+
+    /* ── MiniCalendar ───────────────────────────────────────────────────────── */
+    function MiniCalendar({ logDates = [] }) {
+      const now = new Date();
+      const [yr, setYr] = useState(now.getFullYear());
+      const [mo, setMo] = useState(now.getMonth()); // 0-based
+      const today = todayStr();
+
+      const firstDay = new Date(yr, mo, 1);
+      const startDow = (firstDay.getDay() + 6) % 7;
+      const daysInMonth = new Date(yr, mo + 1, 0).getDate();
+
+      const cells = [];
+      for (let i = 0; i < startDow; i++) cells.push(null);
+      for (let i = 1; i <= daysInMonth; i++) cells.push(i);
+      while (cells.length % 7 !== 0) cells.push(null);
+
+      const weeks = [];
+      for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+
+      const prevMo = () => { if (mo === 0) { setYr(y => y - 1); setMo(11); } else setMo(m => m - 1); };
+      const nextMo = () => { if (mo === 11) { setYr(y => y + 1); setMo(0); } else setMo(m => m + 1); };
+
+      const label = new Date(yr, mo, 1).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long' });
+
+      return (
+        <div className="mini-cal">
+          <div className="mini-cal-header">
+            <button className="mini-cal-nav" onClick={prevMo}>‹</button>
+            <span>{label}</span>
+            <button className="mini-cal-nav" onClick={nextMo}>›</button>
+          </div>
+          <div className="mini-cal-grid">
+            <div className="mini-cal-wn" />
+            {DOW_KO.map(d => <div key={d} className="mini-cal-dow">{d}</div>)}
+            {weeks.map((week, wi) => {
+              const firstReal = week.find(d => d !== null);
+              const wn = firstReal
+                ? isoWeekNum(`${yr}-${String(mo + 1).padStart(2, '0')}-${String(firstReal).padStart(2, '0')}`)
+                : '';
+              return (
+                <Fragment key={wi}>
+                  <div className="mini-cal-wn">{wn}</div>
+                  {week.map((day, di) => {
+                    if (!day) return <div key={di} />;
+                    const ds = `${yr}-${String(mo + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                    const isToday = ds === today;
+                    const hasLog = logDates.includes(ds);
+                    let cls = 'mini-cal-day';
+                    if (isToday) cls += ' today';
+                    if (hasLog) cls += ' has-log';
+                    return <div key={di} className={cls}>{day}</div>;
+                  })}
+                </Fragment>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    /* ── TaskCard ───────────────────────────────────────────────────────────── */
+    function TaskCard({ task, onStatus, onEdit, compact = false }) {
+      const [expanded, setExpanded] = useState(false);
+      const color = PRIORITY_COLOR[task.priority] || '#9ca3af';
+      const isDone = task.status === 'DONE';
+
+      return (
+        <div className="task-card">
+          <div className="task-pbar" style={{ background: color }} />
+          <div className="task-body">
+            <div className={`task-title${isDone ? ' done' : ''}`}>{task.title}</div>
+            <div className="task-meta">
+              <span className={`badge badge-${task.priority.toLowerCase()}`}>{task.priority}</span>
+              <span className={`badge badge-${task.status.toLowerCase()}`}>{task.status}</span>
+              {task.project && <span className="text-xs text-3">📁 {task.project}</span>}
+              {task.deadline && <span className="text-xs text-3">📅 {task.deadline}</span>}
+            </div>
+            {task.note && expanded && (
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', marginTop: '6px',
+                            whiteSpace: 'pre-wrap', color: 'var(--text-2)', lineHeight: 1.6 }}>
+                {task.note}
+              </div>
+            )}
+          </div>
+          <div className="task-actions">
+            {!isDone && task.status !== 'DOING' &&
+              <button className="btn btn-sm btn-icon" title="진행 중" onClick={() => onStatus(task.id, 'DOING')}>▶</button>}
+            {!isDone && task.status === 'DOING' &&
+              <button className="btn btn-sm btn-icon" title="대기" onClick={() => onStatus(task.id, 'TODO')}>⏸</button>}
+            {!isDone &&
+              <button className="btn btn-sm btn-icon btn-primary" title="완료" onClick={() => onStatus(task.id, 'DONE')}>✓</button>}
+            {isDone &&
+              <button className="btn btn-sm btn-icon" title="되돌리기" onClick={() => onStatus(task.id, 'TODO')}>↩</button>}
+            {onEdit &&
+              <button className="btn btn-sm btn-icon" title="수정" onClick={() => onEdit(task)}>✏</button>}
+            {task.note &&
+              <button className="btn btn-sm btn-icon" onClick={() => setExpanded(e => !e)}>{expanded ? '▴' : '▾'}</button>}
+          </div>
+        </div>
+      );
+    }
+
+    /* ── QuickAdd ───────────────────────────────────────────────────────────── */
+    function QuickAdd({ projects, onAdded }) {
+      const [title, setTitle] = useState('');
+      const [priority, setPriority] = useState('B');
+      const [deadline, setDeadline] = useState('');
+      const [project, setProject] = useState('');
+      const [adding, setAdding] = useState(false);        // 중복 제출 방지
+      const [pendingTitle, setPendingTitle] = useState('');// 날짜 확인 대기 중 제목
+      const [showConfirm, setShowConfirm] = useState(false);
+      const ref = useRef();
+
+      /* 실제 등록 처리 — deadline은 null 또는 YYYY-MM-DD */
+      const commit = async (t, dl) => {
+        if (adding) return;
+        setAdding(true);
+        setShowConfirm(false);
+        try {
+          await POST('/tasks/add', { title: t, priority, deadline: dl, project, journal_date: todayStr() });
+          showToast('Task 추가! ✓');
+          setTitle('');
+          setDeadline('');
+          setPendingTitle('');
+          onAdded();
+        } catch (e) { /* POST already shows toast */ }
+        finally { setAdding(false); }
+      };
+
+      /* 추가 버튼 / Enter 핸들러 */
+      const handleAdd = (e) => {
+        // Enter 키보드 이벤트인 경우 버튼 클릭 중복 방지
+        if (e && e.type === 'keydown' && e.key !== 'Enter') return;
+        if (adding) return;
+        const t = title.trim();
+        if (!t) { showToast('할 일을 입력하세요'); ref.current?.focus(); return; }
+
+        if (!deadline) {
+          // 날짜 없음 → 확인 팝업
+          setPendingTitle(t);
+          setShowConfirm(true);
+        } else {
+          commit(t, deadline);
+        }
+      };
+
+      return (
+        <div className="quick-add">
+          <input
+            ref={ref}
+            placeholder="+ 할 일 추가… (Enter)"
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleAdd(e)}
+            style={{ marginBottom: '6px' }}
+          />
+          <div className="flex gap8 items-center" style={{ flexWrap: 'wrap' }}>
+            {['A', 'B', 'C'].map(p => (
+              <button key={p} className={`priority-btn pb-${p}${priority === p ? ' sel' : ''}`}
+                onClick={() => setPriority(p)}>{p}</button>
+            ))}
+            <select value={project} onChange={e => setProject(e.target.value)}
+              style={{ flex: 1, minWidth: 80, fontSize: 12, padding: '2px 6px', height: 26 }}>
+              <option value="">프로젝트 없음</option>
+              {projects.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+            </select>
+            <input type="date" value={deadline} onChange={e => setDeadline(e.target.value)}
+              style={{ width: 'auto', fontSize: 12, padding: '2px 6px', height: 26 }} />
+            <button className="btn btn-primary btn-sm" disabled={adding} onClick={handleAdd}>
+              {adding ? '…' : '+ 추가'}
+            </button>
+          </div>
+
+          {/* 날짜 없음 확인 팝업 */}
+          {showConfirm && (
+            <div style={{
+              background: 'var(--accent-light)', border: '1px solid var(--accent)',
+              borderRadius: 'var(--radius)', padding: '10px 12px', marginTop: 8, fontSize: 12
+            }}>
+              <div className="fw600 mb8">📅 마감일을 설정하지 않았어요</div>
+              <div className="text-3" style={{ marginBottom: 8 }}>Gantt 차트에 표시하려면 마감일이 필요합니다.</div>
+              <div className="flex gap8">
+                <button className="btn btn-sm btn-primary" onClick={() => commit(pendingTitle, todayStr())}>
+                  오늘({todayStr()})로 등록
+                </button>
+                <button className="btn btn-sm" onClick={() => commit(pendingTitle, null)}>날짜 없이 등록</button>
+                <button className="btn btn-sm btn-danger" onClick={() => { setShowConfirm(false); setPendingTitle(''); }}>취소</button>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    /* ── EditModal ──────────────────────────────────────────────────────────── */
+    function EditModal({ task, projects, onSaved, onClose }) {
+      const [form, setForm] = useState({
+        title: task.title,
+        priority: task.priority,
+        project: task.project || '',
+        deadline: task.deadline || '',
+        note: task.note || ''
+      });
+      const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+      const save = async () => {
+        if (!form.title.trim()) { showToast('제목을 입력하세요'); return; }
+        try {
+          await POST(`/tasks/${task.id}/edit`, { ...form, deadline: form.deadline || null });
+          showToast('저장됐어요! ✓');
+          onSaved();
+          onClose();
+        } catch (e) { /* POST already shows toast */ }
+      };
+
+      return (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+          <div className="modal">
+            <div className="modal-title">✏ Task 수정</div>
+            <input value={form.title} onChange={e => set('title', e.target.value)}
+              placeholder="제목 *" style={{ marginBottom: 8 }} onKeyDown={e => e.key === 'Enter' && save()} />
+            <div className="flex gap8 mb8">
+              <select value={form.priority} onChange={e => set('priority', e.target.value)} style={{ flex: 1 }}>
+                <option value="A">🔴 A 우선</option>
+                <option value="B">🟡 B 우선</option>
+                <option value="C">⚪ C 우선</option>
+              </select>
+              <input type="date" value={form.deadline} onChange={e => set('deadline', e.target.value)} style={{ flex: 1 }} />
+            </div>
+            <select value={form.project} onChange={e => set('project', e.target.value)} style={{ marginBottom: 8 }}>
+              <option value="">프로젝트 없음</option>
+              {projects.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+            </select>
+            <textarea value={form.note} onChange={e => set('note', e.target.value)}
+              placeholder="메모 (선택)" rows={3}
+              style={{ marginBottom: 16, fontFamily: 'var(--font-mono)', fontSize: 12 }} />
+            <div className="flex justify-between gap8">
+              <button className="btn" onClick={onClose}>취소</button>
+              <button className="btn btn-primary" onClick={save}>저장</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    /* ── HeatmapGrid ────────────────────────────────────────────────────────── */
+    function HeatmapGrid({ data }) {
+      const [tip, setTip] = useState(null);
+      if (!data || !data.length) return null;
+
+      function lvl(c) {
+        if (c === 0) return 0; if (c === 1) return 1;
+        if (c <= 3) return 2; if (c <= 6) return 3; return 4;
+      }
+
+      const first = new Date(data[0].date + 'T00:00:00');
+      const startDow = (first.getDay() + 6) % 7;
+      const padded = [...Array(startDow).fill(null), ...data];
+      while (padded.length % 7 !== 0) padded.push(null);
+      const numWeeks = padded.length / 7;
+
+      return (
+        <div style={{ position: 'relative' }}>
+          <div style={{
+            display: 'grid',
+            gridTemplateRows: 'repeat(7, 12px)',
+            gridTemplateColumns: `repeat(${numWeeks}, 12px)`,
+            gridAutoFlow: 'column',
+            gap: 3
+          }}>
+            {padded.map((d, i) => (
+              <div key={i}
+                className={`heat-cell heat-${d ? lvl(d.count) : 0}`}
+                style={!d ? { visibility: 'hidden' } : { cursor: 'pointer' }}
+                onMouseEnter={d ? e => setTip({ text: `${d.date}  완료 ${d.count}개`, x: e.clientX, y: e.clientY }) : null}
+                onMouseLeave={() => setTip(null)}
+              />
+            ))}
+          </div>
+          {tip && (
+            <div style={{
+              position: 'fixed', left: tip.x + 10, top: tip.y - 30,
+              background: 'var(--text)', color: 'var(--bg)',
+              padding: '4px 10px', borderRadius: 6, fontSize: 11,
+              pointerEvents: 'none', zIndex: 1000, whiteSpace: 'nowrap'
+            }}>{tip.text}</div>
+          )}
+        </div>
+      );
+    }
+
+    /* ══════════════════════════════════════════════════════════════════════════
+       VIEW: Dashboard
+    ══════════════════════════════════════════════════════════════════════════ */
+    function DashboardView({ tasks, projects, heatmap, reload }) {
+      const [content, setContent] = useState('');
+      const [saveStatus, setSaveStatus] = useState('');
+      const [editTask, setEditTask] = useState(null);
+      const saveTimer  = useRef(null);
+      const taRef      = useRef(null);   // textarea ref for cursor 복원
+      const pendingPos = useRef(null);   // 커서 위치 복원용
+      const jDate = todayStr();
+
+      useEffect(() => {
+        GET(`/api/journal/${jDate}`).then(j => setContent(j.content || ''));
+      }, []);
+
+      // content 변경 후 커서 위치 복원
+      useEffect(() => {
+        if (pendingPos.current !== null && taRef.current) {
+          taRef.current.setSelectionRange(pendingPos.current, pendingPos.current);
+          pendingPos.current = null;
+        }
+      }, [content]);
+
+      const doSave = async (val) => {
+        try {
+          await POST('/journal/save', { date: jDate, content: val });
+          setSaveStatus('✓ ' + new Date().toLocaleTimeString());
+          return true;
+        } catch (e) {
+          setSaveStatus('저장 실패 ✗');
+          return false;
+        }
+      };
+
+      const autoSave = val => {
+        setContent(val);
+        setSaveStatus('편집 중…');
+        clearTimeout(saveTimer.current);
+        saveTimer.current = setTimeout(() => doSave(val), 2000);
+      };
+
+      const manualSave = async () => {
+        clearTimeout(saveTimer.current);
+        if (await doSave(content)) showToast('저장됐어요 ✓');
+      };
+
+      /* ── 일지 마크다운 키보드 핸들러 ───────────────────────────────────────── */
+      const handleJournalKey = useCallback((e) => {
+        const ta = taRef.current;
+        if (!ta) return;
+        const val = ta.value;
+        const pos = ta.selectionStart;
+
+        if (e.key === 'Enter') {
+          // 현재 줄 찾기
+          const lineStart = val.lastIndexOf('\n', pos - 1) + 1;
+          const line      = val.slice(lineStart, pos);
+          // "  - " 또는 "- " 패턴 매칭
+          const m = line.match(/^(\s*)([-*]) /);
+          if (!m) return; // 일반 Enter
+          e.preventDefault();
+
+          const [, indent, bullet] = m;
+          const itemText = line.slice(m[0].length);
+
+          if (!itemText.trim()) {
+            // 빈 항목 → 리스트 탈출 (현재 줄 마커 제거 + 빈 줄)
+            const newVal   = val.slice(0, lineStart) + val.slice(pos);
+            const newPos   = lineStart;
+            setContent(newVal);
+            pendingPos.current = newPos;
+            clearTimeout(saveTimer.current);
+            saveTimer.current = setTimeout(() => doSave(newVal), 2000);
+          } else {
+            // 리스트 항목 계속
+            const insert   = `\n${indent}${bullet} `;
+            const newVal   = val.slice(0, pos) + insert + val.slice(pos);
+            const newPos   = pos + insert.length;
+            setContent(newVal);
+            pendingPos.current = newPos;
+            clearTimeout(saveTimer.current);
+            saveTimer.current = setTimeout(() => doSave(newVal), 2000);
+          }
+
+        } else if (e.key === 'Tab') {
+          e.preventDefault();
+          const lineStart = val.lastIndexOf('\n', pos - 1) + 1;
+          const lineEnd   = val.indexOf('\n', pos);
+          const lineEndA  = lineEnd === -1 ? val.length : lineEnd;
+          const line      = val.slice(lineStart, lineEndA);
+
+          let newVal, newPos;
+          if (e.shiftKey) {
+            // 내어쓰기
+            if (line.startsWith('  ')) {
+              newVal = val.slice(0, lineStart) + line.slice(2) + val.slice(lineEndA);
+              newPos = Math.max(lineStart, pos - 2);
+            } else return;
+          } else {
+            // 들여쓰기
+            newVal = val.slice(0, lineStart) + '  ' + line + val.slice(lineEndA);
+            newPos = pos + 2;
+          }
+          setContent(newVal);
+          pendingPos.current = newPos;
+          clearTimeout(saveTimer.current);
+          saveTimer.current = setTimeout(() => doSave(newVal), 2000);
+        }
+      }, [content]);
+
+      const onStatus = async (id, status) => {
+        try {
+          await POST(`/tasks/${id}/status`, { status });
+          showToast(STATUS_MSG[status] || '변경됐어요');
+          reload();
+        } catch (e) { /* POST already shows toast */ }
+      };
+
+      const doing   = tasks.filter(t => t.status === 'DOING');
+      const todo    = tasks.filter(t => t.status === 'TODO');
+      const today   = todayStr();
+      const urgent  = tasks.filter(t => t.deadline && !['DONE','CANCELLED'].includes(t.status) &&
+        (new Date(t.deadline) - new Date(today)) / 86400000 <= 2);
+      const last7done = heatmap.slice(-7).reduce((s, d) => s + d.count, 0);
+      const active  = tasks.filter(t => ['TODO','DOING'].includes(t.status)).length;
+
+      return (
+        <div>
+          <div className="page-title">
+            📋 대시보드
+            <span className="text-3 text-sm" style={{ fontWeight: 400 }}>{formatKO(today)}</span>
+          </div>
+
+          {urgent.length > 0 && (
+            <div className="alert alert-red">
+              <span>🔥</span>
+              <div>
+                <strong>마감 임박!</strong>
+                {urgent.map(t => (
+                  <div key={t.id} className="mt4">· [{t.priority}] {t.title} — {t.deadline}</div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="dashboard-grid">
+            {/* Col 1: Tasks */}
+            <div>
+              <div className="card">
+                <div className="card-title">⚡ 진행 중 ({doing.length})</div>
+                {doing.length === 0
+                  ? <p className="text-3 text-sm">진행 중인 Task가 없어요.</p>
+                  : doing.map(t => <TaskCard key={t.id} task={t} onStatus={onStatus} onEdit={setEditTask} />)}
+              </div>
+
+              <QuickAdd projects={projects} onAdded={reload} />
+
+              <div className="card">
+                <div className="card-title">📋 TODO ({todo.length})</div>
+                {todo.length === 0
+                  ? <p className="text-3 text-sm">할 일이 없어요 🎉</p>
+                  : todo.slice(0, 12).map(t => <TaskCard key={t.id} task={t} onStatus={onStatus} onEdit={setEditTask} />)}
+                {todo.length > 12 && <p className="text-3 text-sm mt8">+ {todo.length - 12}개 더</p>}
+              </div>
+            </div>
+
+            {/* Col 2: Journal */}
+            <div>
+              <div className="card">
+                <div className="card-title flex justify-between items-center">
+                  <span>📝 오늘 업무 기록</span>
+                  <div className="flex gap8 items-center">
+                    <span className="text-xs text-3">{saveStatus}</span>
+                    <button className="btn btn-sm btn-primary" onClick={manualSave}>💾 저장</button>
+                  </div>
+                </div>
+                <textarea
+                  ref={taRef}
+                  value={content}
+                  onChange={e => autoSave(e.target.value)}
+                  onKeyDown={handleJournalKey}
+                  rows={22}
+                  style={{
+                    fontFamily: 'var(--font-mono)', fontSize: 13, lineHeight: 1.8,
+                    border: 'none', padding: 0, background: 'transparent',
+                    resize: 'none', width: '100%', outline: 'none'
+                  }}
+                  placeholder={"오늘 한 일, 회의 내용, 이슈 등을 자유롭게 기록하세요.\n\n- 를 입력하고 Enter → 리스트 자동 생성\nTab / Shift+Tab → 들여쓰기 / 내어쓰기\n\n예)\n- 09:00 팀 미팅\n  - Q2 계획 논의\n- 11:00 보고서 초안 작성"}
+                />
+              </div>
+            </div>
+
+            {/* Col 3: Stats */}
+            <div className="dashboard-stats">
+              <div className="card">
+                <div className="card-title">📊 현황</div>
+                <div className="flex gap8 mb12">
+                  {[
+                    { label: '7일 완료', value: last7done, color: 'var(--green)' },
+                    { label: '진행/대기', value: active, color: 'var(--accent)' },
+                    { label: '진행 중', value: doing.length, color: 'var(--amber)' },
+                  ].map(s => (
+                    <div key={s.label} style={{ flex: 1, textAlign: 'center' }}>
+                      <div className="stat-num" style={{ fontSize: 24, color: s.color }}>{s.value}</div>
+                      <div className="text-xs text-3 mt4">{s.label}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="divider" />
+                <div className="card-title mt8">🌿 최근 완료</div>
+                <HeatmapGrid data={heatmap.slice(-21)} />
+              </div>
+            </div>
+          </div>
+
+          {editTask && (
+            <EditModal task={editTask} projects={projects} onSaved={reload} onClose={() => setEditTask(null)} />
+          )}
+        </div>
+      );
+    }
+
+    /* ══════════════════════════════════════════════════════════════════════════
+       VIEW: Briefing
+    ══════════════════════════════════════════════════════════════════════════ */
+    function BriefingView({ tasks, reload }) {
+      const today = todayStr();
+
+      const onStatus = async (id, status) => {
+        try {
+          await POST(`/tasks/${id}/status`, { status });
+          showToast(STATUS_MSG[status] || '변경됐어요');
+          reload();
+        } catch (e) { /* POST already shows toast */ }
+      };
+
+      const doing    = tasks.filter(t => t.status === 'DOING');
+      const todoA    = tasks.filter(t => t.status === 'TODO' && t.priority === 'A');
+      const urgent   = tasks.filter(t => t.deadline && !['DONE','CANCELLED'].includes(t.status) &&
+        (new Date(t.deadline) - new Date(today)) / 86400000 <= 2);
+      const todayDone = tasks.filter(t => t.status === 'DONE' && (t.updated_at || '').startsWith(today));
+      const remaining = tasks.filter(t => t.status === 'TODO');
+
+      return (
+        <div>
+          <div className="page-title">🌅 브리핑 <span className="text-3 text-sm" style={{ fontWeight: 400 }}>{today}</span></div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            {/* Morning */}
+            <div>
+              <div className="card">
+                <div className="card-title">☀️ 모닝 브리핑</div>
+
+                {urgent.length > 0 && (
+                  <div className="alert alert-red" style={{ marginBottom: 12 }}>
+                    <span>🔥</span>
+                    <div>
+                      <strong>마감 임박!</strong>
+                      {urgent.map(t => <div key={t.id} className="mt4">· [{t.priority}] {t.title} — {t.deadline}</div>)}
+                    </div>
+                  </div>
+                )}
+
+                {doing.length > 0 && (
+                  <div className="mb12">
+                    <div className="fw600 text-sm mb8">⚡ 진행 중 ({doing.length})</div>
+                    {doing.map(t => <TaskCard key={t.id} task={t} onStatus={onStatus} />)}
+                  </div>
+                )}
+
+                {todoA.length > 0 && (
+                  <div>
+                    <div className="fw600 text-sm mb8">🔴 A 우선 ({todoA.length})</div>
+                    {todoA.map(t => <TaskCard key={t.id} task={t} onStatus={onStatus} />)}
+                  </div>
+                )}
+
+                {doing.length === 0 && todoA.length === 0 && urgent.length === 0 && (
+                  <p className="text-3">오늘 집중할 Task를 설정하세요! 🚀</p>
+                )}
+              </div>
+            </div>
+
+            {/* Evening */}
+            <div>
+              <div className="card">
+                <div className="card-title">🌙 저녁 체크</div>
+
+                {todayDone.length > 0 ? (
+                  <div className="mb12">
+                    <div className="fw600 text-sm mb8" style={{ color: 'var(--green)' }}>
+                      ✅ 오늘 완료 ({todayDone.length})
+                    </div>
+                    {todayDone.map(t => (
+                      <div key={t.id} className="task-card">
+                        <div className="task-pbar" style={{ background: PRIORITY_COLOR[t.priority] }} />
+                        <div className="task-body">
+                          <div className="task-title done">{t.title}</div>
+                        </div>
+                        <button className="btn btn-sm btn-icon" title="되돌리기" onClick={() => onStatus(t.id, 'TODO')}>↩</button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-3 text-sm mb12">아직 완료한 Task가 없어요.</p>
+                )}
+
+                <div className="divider" />
+                <div className="fw600 text-sm mb8">남은 TODO ({remaining.length})</div>
+                {remaining.slice(0, 6).map(t => <TaskCard key={t.id} task={t} onStatus={onStatus} />)}
+                {remaining.length > 6 && <p className="text-3 text-sm mt8">+ {remaining.length - 6}개 더</p>}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    /* ── ExcelImportModal ───────────────────────────────────────────────────── */
+    function ExcelImportModal({ projects, onImported, onClose }) {
+      const [step, setStep]       = useState(1);
+      const [headers, setHeaders] = useState([]);
+      const [rows, setRows]       = useState([]);
+      const [mapping, setMapping] = useState({ title: '', project: '', deadline: '', priority: '', note: '' });
+      const [importing, setImporting] = useState(false);
+      const fileRef = useRef();
+
+      const FIELD_LABELS = {
+        title: '제목 *', project: '프로젝트', deadline: '마감일', priority: '우선순위', note: '메모'
+      };
+
+      const handleFile = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          try {
+            const data = new Uint8Array(ev.target.result);
+            const wb   = XLSX.read(data, { type: 'array' });
+            const ws   = wb.Sheets[wb.SheetNames[0]];
+            const all  = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+            if (!all.length) { showToast('파일이 비어 있어요'); return; }
+            const hdrs = all[0].map(h => String(h || ''));
+            setHeaders(hdrs);
+            setRows(all);
+            // 컬럼명 자동 매핑
+            const m = { title: '', project: '', deadline: '', priority: '', note: '' };
+            hdrs.forEach((h, i) => {
+              const s = h.toLowerCase();
+              if (!m.title    && /제목|title|task|할일|업무/.test(s))   m.title    = String(i);
+              else if (!m.project  && /프로젝트|project/.test(s))        m.project  = String(i);
+              else if (!m.deadline && /마감|deadline|due|기한/.test(s))  m.deadline = String(i);
+              else if (!m.priority && /우선|priority/.test(s))           m.priority = String(i);
+              else if (!m.note     && /메모|note|비고|설명/.test(s))     m.note     = String(i);
+            });
+            setMapping(m);
+            setStep(2);
+          } catch (err) {
+            showToast('파일 읽기 실패 — xlsx / csv 파일인지 확인하세요');
+            console.error(err);
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      };
+
+      const parseDeadline = (val) => {
+        if (val === '' || val == null) return null;
+        if (typeof val === 'number') {
+          // Excel 날짜 시리얼 → JS Date
+          const d = new Date(Math.round((val - 25569) * 86400 * 1000));
+          return d.toISOString().slice(0, 10);
+        }
+        const s = String(val).trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+        const d = new Date(s);
+        return isNaN(d) ? null : d.toISOString().slice(0, 10);
+      };
+
+      const parsePriority = (val) => {
+        if (!val) return 'B';
+        const s = String(val).toUpperCase().trim();
+        if (/^A$|높음|HIGH|긴급/.test(s)) return 'A';
+        if (/^C$|낮음|LOW|보통/.test(s)) return 'C';
+        return 'B';
+      };
+
+      const dataRows = rows.slice(1).filter(r =>
+        mapping.title !== '' && String(r[parseInt(mapping.title)] || '').trim() !== ''
+      );
+
+      const doImport = async () => {
+        if (!mapping.title) { showToast('제목 컬럼을 선택하세요'); return; }
+        setImporting(true);
+        let count = 0;
+        for (const row of dataRows) {
+          const title = String(row[parseInt(mapping.title)] || '').trim();
+          if (!title) continue;
+          try {
+            await POST('/tasks/add', {
+              title,
+              project:  mapping.project  !== '' ? String(row[parseInt(mapping.project)]  || '') : '',
+              deadline: mapping.deadline !== '' ? parseDeadline(row[parseInt(mapping.deadline)]) : null,
+              priority: mapping.priority !== '' ? parsePriority(row[parseInt(mapping.priority)]) : 'B',
+              note:     mapping.note     !== '' ? String(row[parseInt(mapping.note)]     || '') : '',
+              journal_date: todayStr()
+            });
+            count++;
+          } catch (e) { /* continue next row */ }
+        }
+        showToast(`${count}개 Task 가져왔어요! ✓`);
+        setImporting(false);
+        onImported();
+        onClose();
+      };
+
+      const StepDot = ({ n, label }) => (
+        <div className="flex items-center gap4">
+          <div style={{
+            width: 20, height: 20, borderRadius: '50%',
+            background: step >= n ? 'var(--accent)' : 'var(--surface-2)',
+            color: step >= n ? 'white' : 'var(--text-3)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 11, fontWeight: 700, flexShrink: 0
+          }}>{n}</div>
+          <span className="text-xs" style={{ color: step === n ? 'var(--accent)' : 'var(--text-3)', fontWeight: step === n ? 700 : 400 }}>{label}</span>
+        </div>
+      );
+
+      return (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+          <div className="modal" style={{ width: 520 }}>
+            {/* Step 표시기 */}
+            <div className="flex items-center gap8 mb12">
+              <StepDot n={1} label="파일 선택" />
+              <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+              <StepDot n={2} label="컬럼 매핑" />
+              <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+              <StepDot n={3} label="가져오기" />
+            </div>
+
+            {/* Step 1: 파일 업로드 */}
+            {step === 1 && (
+              <div>
+                <div className="modal-title">📊 Excel / CSV 가져오기</div>
+                <div
+                  style={{
+                    border: '2px dashed var(--border)', borderRadius: 'var(--radius-lg)',
+                    padding: 32, textAlign: 'center', cursor: 'pointer',
+                    transition: 'border-color var(--transition)'
+                  }}
+                  onClick={() => fileRef.current?.click()}
+                  onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--accent)'; }}
+                  onDragLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; }}
+                  onDrop={e => {
+                    e.preventDefault();
+                    e.currentTarget.style.borderColor = 'var(--border)';
+                    const f = e.dataTransfer.files[0];
+                    if (f) handleFile({ target: { files: [f] } });
+                  }}
+                >
+                  <div style={{ fontSize: 36, marginBottom: 8 }}>📂</div>
+                  <div className="fw600 mb4">클릭하거나 파일을 여기로 드래그하세요</div>
+                  <div className="text-sm text-3">.xlsx · .xls · .csv 지원</div>
+                  <div className="text-xs text-3 mt8">첫 번째 행 = 컬럼 헤더</div>
+                </div>
+                <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} style={{ display: 'none' }} />
+                <div className="flex justify-end mt12">
+                  <button className="btn" onClick={onClose}>취소</button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: 컬럼 매핑 */}
+            {step === 2 && (
+              <div>
+                <div className="modal-title">컬럼 연결</div>
+                <p className="text-sm text-3 mb12">엑셀 컬럼을 WorkLog 항목에 연결하세요. (자동 감지됨)</p>
+                {Object.entries(FIELD_LABELS).map(([field, label]) => (
+                  <div key={field} className="flex items-center justify-between mb8 gap8">
+                    <span className="text-sm fw600" style={{ width: 80, flexShrink: 0, color: field === 'title' ? 'var(--accent)' : 'var(--text-2)' }}>
+                      {label}
+                    </span>
+                    <select
+                      value={mapping[field]}
+                      onChange={e => setMapping(m => ({ ...m, [field]: e.target.value }))}
+                      style={{ flex: 1 }}
+                    >
+                      <option value="">-- 사용 안 함 --</option>
+                      {headers.map((h, i) => (
+                        <option key={i} value={String(i)}>{h || `열 ${i + 1}`}</option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+                <div className="flex justify-between mt12">
+                  <button className="btn" onClick={() => setStep(1)}>← 이전</button>
+                  <button className="btn btn-primary" onClick={() => {
+                    if (!mapping.title) { showToast('제목 컬럼은 필수예요'); return; }
+                    if (dataRows.length === 0) { showToast('등록할 Task가 없어요'); return; }
+                    setStep(3);
+                  }}>
+                    다음 → ({dataRows.length}개 Task 확인)
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 3: 미리보기 + 확인 */}
+            {step === 3 && (
+              <div>
+                <div className="modal-title">가져오기 확인</div>
+                <p className="text-sm mb8">총 <strong>{dataRows.length}개</strong> Task를 등록합니다. 미리 보기 (최대 8개):</p>
+                <div style={{ maxHeight: 260, overflowY: 'auto', marginBottom: 14, border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}>
+                  {dataRows.slice(0, 8).map((row, i) => {
+                    const t  = String(row[parseInt(mapping.title)] || '');
+                    const p  = mapping.project  !== '' ? String(row[parseInt(mapping.project)]  || '') : '';
+                    const dl = mapping.deadline !== '' ? parseDeadline(row[parseInt(mapping.deadline)]) : null;
+                    const pr = mapping.priority !== '' ? parsePriority(row[parseInt(mapping.priority)]) : 'B';
+                    return (
+                      <div key={i} style={{ padding: '7px 12px', borderBottom: '1px solid var(--border)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span className={`badge badge-${pr.toLowerCase()}`}>{pr}</span>
+                        <span className="fw600 text-ellipsis" style={{ flex: 1 }}>{t}</span>
+                        {p  && <span className="text-xs text-3">📁 {p}</span>}
+                        {dl && <span className="text-xs text-3">📅 {dl}</span>}
+                      </div>
+                    );
+                  })}
+                  {dataRows.length > 8 && (
+                    <p className="text-xs text-3" style={{ padding: '6px 12px' }}>… 외 {dataRows.length - 8}개 더</p>
+                  )}
+                </div>
+                <div className="flex justify-between">
+                  <button className="btn" onClick={() => setStep(2)}>← 이전</button>
+                  <button className="btn btn-primary" disabled={importing} onClick={doImport}>
+                    {importing ? '등록 중…' : `✓ ${dataRows.length}개 Task 등록`}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    /* ══════════════════════════════════════════════════════════════════════════
+       VIEW: Gantt
+    ══════════════════════════════════════════════════════════════════════════ */
+    function GanttView({ tasks, projects, reload }) {
+      const [filterProject, setFilterProject]   = useState('all');
+      const [showExcelModal, setShowExcelModal] = useState(false);
+      const weeksCount = 6;
+
+      const today    = todayStr();
+      const ws       = weekStartOf(today);
+      const weeks    = [];
+      for (let i = -1; i < weeksCount - 1; i++) {
+        const s = addDays(ws, i * 7);
+        weeks.push({ start: s, end: addDays(s, 6), label: `W${isoWeekNum(s)}` });
+      }
+
+      const firstWeek  = new Date(weeks[0].start + 'T00:00:00');
+      const totalDays  = weeks.length * 7;
+      const todayPct   = ((new Date(today + 'T00:00:00') - firstWeek) / 86400000 / totalDays) * 100;
+
+      const projColor = {};
+      projects.forEach(p => { projColor[p.name] = p.color; });
+
+      const filtered = tasks.filter(t =>
+        t.deadline &&
+        !['CANCELLED'].includes(t.status) &&
+        (filterProject === 'all' || t.project === filterProject)
+      );
+
+      return (
+        <div>
+          <div className="flex" style={{ alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div className="page-title" style={{ marginBottom: 0 }}>📅 전체 일정 (Gantt)</div>
+            <button className="btn btn-sm"
+              style={{ background: 'var(--accent)', color: '#fff', border: 'none' }}
+              onClick={() => setShowExcelModal(true)}>
+              📊 Excel 가져오기
+            </button>
+          </div>
+
+          <div className="flex gap8 mb12" style={{ flexWrap: 'wrap' }}>
+            <span className={`chip${filterProject === 'all' ? ' active' : ''}`}
+              onClick={() => setFilterProject('all')}>전체</span>
+            {projects.map(p => (
+              <span key={p.id}
+                className={`chip${filterProject === p.name ? ' active' : ''}`}
+                style={filterProject === p.name ? {} : { borderColor: p.color + '80' }}
+                onClick={() => setFilterProject(p.name)}>
+                <span style={{ marginRight: 4, fontSize: 8 }}>●</span>{p.name}
+              </span>
+            ))}
+          </div>
+
+          <div className="card" style={{ overflow: 'auto' }}>
+            {/* Header */}
+            <div className="gantt-row" style={{ background: 'var(--surface-2)', minHeight: 36 }}>
+              <div className="gantt-title-col" style={{ fontWeight: 600, fontSize: 11, color: 'var(--text-3)' }}>TASK</div>
+              <div className="gantt-bars" style={{ position: 'relative' }}>
+                {weeks.map((w, wi) => (
+                  <div key={wi} className="gantt-week-col"
+                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                             fontSize: 10, color: 'var(--text-3)', fontWeight: 600, minHeight: 36 }}>
+                    {w.label}
+                    <span style={{ fontWeight: 400, fontSize: 9 }}>{w.start.slice(5)}</span>
+                  </div>
+                ))}
+                {todayPct >= 0 && todayPct <= 100 && (
+                  <div className="gantt-today-line" style={{ left: `${todayPct}%` }} />
+                )}
+              </div>
+            </div>
+
+            {filtered.length === 0 ? (
+              <p className="text-3 text-sm" style={{ padding: 16 }}>마감일이 있는 Task가 없어요.</p>
+            ) : (
+              filtered.map(t => {
+                const dlDate  = new Date(t.deadline + 'T00:00:00');
+                const crDate  = t.created_at ? new Date(t.created_at.slice(0, 10) + 'T00:00:00') : dlDate;
+                const barS    = Math.max(0, (crDate - firstWeek) / 86400000);
+                const barE    = (dlDate - firstWeek) / 86400000 + 1;
+                const sPct    = (barS / totalDays) * 100;
+                const wPct    = Math.max(0.5, ((barE - barS) / totalDays) * 100);
+                const color   = projColor[t.project] || '#6366f1';
+                const isDone  = t.status === 'DONE';
+
+                return (
+                  <div key={t.id} className="gantt-row">
+                    <div className="gantt-title-col">
+                      <div className="text-ellipsis fw600" style={{ fontSize: 12 }}>{t.title}</div>
+                      <div className="text-xs text-3">{t.project || '—'} · {t.deadline}</div>
+                    </div>
+                    <div className="gantt-bars" style={{ position: 'relative' }}>
+                      {weeks.map((_, wi) => <div key={wi} className="gantt-week-col" />)}
+                      {sPct < 100 && (
+                        <div className="gantt-bar" style={{
+                          left: `${sPct}%`,
+                          width: `${Math.min(wPct, 100 - sPct)}%`,
+                          background: isDone ? '#9ca3af' : color,
+                          opacity: isDone ? .5 : 1
+                        }}>
+                          {t.title.length > 14 ? t.title.slice(0, 14) + '…' : t.title}
+                        </div>
+                      )}
+                      {todayPct >= 0 && todayPct <= 100 && (
+                        <div className="gantt-today-line" style={{ left: `${todayPct}%` }} />
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {showExcelModal && (
+            <ExcelImportModal
+              projects={projects}
+              onImported={reload}
+              onClose={() => setShowExcelModal(false)}
+            />
+          )}
+        </div>
+      );
+    }
+
+    /* ══════════════════════════════════════════════════════════════════════════
+       VIEW: Weekly
+    ══════════════════════════════════════════════════════════════════════════ */
+    function WeeklyView({ heatmap }) {
+      const [ws, setWs] = useState(weekStartOf(todayStr()));
+      const [journals, setJournals] = useState([]);
+      const [stats, setStats] = useState({ total: 0, done: 0, active: 0 });
+      const [collapsed, setCollapsed] = useState({});
+
+      const we = addDays(ws, 6);
+
+      useEffect(() => {
+        Promise.all([
+          GET(`/api/journals/range?start=${ws}&end=${we}`),
+          GET(`/api/stats/weekly?start=${ws}&end=${we}`)
+        ]).then(([j, s]) => { setJournals(j); setStats(s); });
+      }, [ws]);
+
+      const pct = stats.total > 0 ? Math.round(stats.done / stats.total * 100) : 0;
+
+      const weekDays = Array.from({ length: 7 }, (_, i) => {
+        const d = addDays(ws, i);
+        return { date: d, journal: journals.find(j => j.date === d) };
+      });
+
+      return (
+        <div>
+          <div className="page-title flex justify-between items-center">
+            <span>📊 주간 리포트</span>
+            <div className="flex gap8">
+              <button className="btn btn-sm" onClick={() => setWs(addDays(ws, -7))}>← 이전 주</button>
+              <button className="btn btn-sm" onClick={() => setWs(weekStartOf(todayStr()))}>이번 주</button>
+              <button className="btn btn-sm" onClick={() => {
+                const next = addDays(ws, 7);
+                if (next > todayStr()) { showToast('아직 미래예요 😄'); return; }
+                setWs(next);
+              }}>다음 주 →</button>
+            </div>
+          </div>
+          <p className="text-2 text-sm" style={{ marginTop: -8, marginBottom: 16 }}>{ws} ~ {we}</p>
+
+          {/* Stats */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 14 }}>
+            {[
+              { label: '이번 주 등록', v: stats.total, color: 'var(--accent)' },
+              { label: '완료', v: stats.done, color: 'var(--green)' },
+              { label: '진행/대기', v: stats.active, color: 'var(--amber)' },
+            ].map(s => (
+              <div key={s.label} className="card" style={{ textAlign: 'center', padding: 14 }}>
+                <div className="stat-num" style={{ color: s.color }}>{s.v}</div>
+                <div className="text-xs text-3 mt4">{s.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Progress */}
+          {stats.total > 0 && (
+            <div className="card" style={{ padding: '12px 16px', marginBottom: 14 }}>
+              <div className="flex justify-between items-center mb8">
+                <span className="text-sm fw600">이번 주 완료율</span>
+                <strong style={{ color: 'var(--green)' }}>{pct}%</strong>
+              </div>
+              <div className="progress-bar">
+                <div className="progress-fill" style={{ width: `${pct}%` }} />
+              </div>
+            </div>
+          )}
+
+          {/* Heatmap */}
+          <div className="card" style={{ marginBottom: 14 }}>
+            <div className="card-title">🌿 최근 35일 완료 현황</div>
+            <HeatmapGrid data={heatmap} />
+          </div>
+
+          {/* Day journals */}
+          {weekDays.map(({ date, journal }) => {
+            const isToday = date === todayStr();
+            const hasContent = journal && journal.content;
+            const isCollapsed = collapsed[date];
+
+            return (
+              <div key={date} className="card" style={{ marginBottom: 8 }}>
+                <div className="flex justify-between items-center" style={{ cursor: 'pointer' }}
+                  onClick={() => setCollapsed(c => ({ ...c, [date]: !c[date] }))}>
+                  <div className="flex items-center gap8">
+                    <span className={`fw600${isToday ? '' : ' text-2'}`}>{formatKO(date)}</span>
+                    {!hasContent && <span className="text-xs text-3">기록 없음</span>}
+                  </div>
+                  <span className="text-3">{isCollapsed ? '▸' : '▾'}</span>
+                </div>
+                {!isCollapsed && hasContent && (
+                  <pre style={{
+                    fontFamily: 'var(--font-mono)', fontSize: 13, whiteSpace: 'pre-wrap',
+                    color: 'var(--text)', lineHeight: 1.75, marginTop: 10,
+                    padding: 10, background: 'var(--surface-2)', borderRadius: 'var(--radius)'
+                  }}>{journal.content}</pre>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    /* ══════════════════════════════════════════════════════════════════════════
+       VIEW: Cleanup
+    ══════════════════════════════════════════════════════════════════════════ */
+    function CleanupView({ tasks, reload }) {
+      const stale = tasks.filter(t => {
+        if (t.status !== 'DOING') return false;
+        return (new Date() - new Date(t.updated_at)) / 86400000 >= 7;
+      });
+      const cancelled = tasks.filter(t => t.status === 'CANCELLED');
+
+      const onStatus = async (id, status) => {
+        try {
+          await POST(`/tasks/${id}/status`, { status });
+          showToast(STATUS_MSG[status] || '변경됐어요');
+          reload();
+        } catch (e) { /* POST already shows toast */ }
+      };
+
+      const onDelete = async (id) => {
+        if (!confirm('이 Task를 삭제할까요?')) return;
+        try {
+          await POST(`/tasks/${id}/delete`, {});
+          showToast('삭제됐어요');
+          reload();
+        } catch (e) { /* POST already shows toast */ }
+      };
+
+      return (
+        <div>
+          <div className="page-title">🧹 Task 정리</div>
+
+          {/* Stale */}
+          <div className="card">
+            <div className="card-title">⏳ 오래된 Task ({stale.length}개) — 7일 이상 DOING 방치</div>
+            {stale.length === 0
+              ? <p className="text-3 text-sm">방치된 Task가 없어요 👍</p>
+              : stale.map(t => (
+                <div key={t.id} className="task-card">
+                  <div className="task-pbar" style={{ background: PRIORITY_COLOR[t.priority] }} />
+                  <div className="task-body">
+                    <div className="task-title">{t.title}</div>
+                    <div className="task-meta">
+                      <span className={`badge badge-${t.priority.toLowerCase()}`}>{t.priority}</span>
+                      {t.project && <span className="text-xs text-3">📁 {t.project}</span>}
+                      <span className="text-xs text-3">마지막 변경: {(t.updated_at || '').slice(0, 10)}</span>
+                    </div>
+                  </div>
+                  <div className="task-actions">
+                    <button className="btn btn-sm btn-primary" onClick={() => onStatus(t.id, 'DONE')}>완료</button>
+                    <button className="btn btn-sm" onClick={() => onStatus(t.id, 'TODO')}>대기로</button>
+                    <button className="btn btn-sm btn-danger" onClick={() => onStatus(t.id, 'CANCELLED')}>취소</button>
+                  </div>
+                </div>
+              ))
+            }
+          </div>
+
+          {/* Cancelled */}
+          <div className="card">
+            <div className="card-title">✕ 취소된 Task ({cancelled.length}개)</div>
+            {cancelled.length === 0
+              ? <p className="text-3 text-sm">취소된 Task가 없어요.</p>
+              : cancelled.map(t => (
+                <div key={t.id} className="task-card" style={{ opacity: .55 }}>
+                  <div className="task-pbar" style={{ background: '#9ca3af' }} />
+                  <div className="task-body">
+                    <div className="task-title line-through">{t.title}</div>
+                    <div className="task-meta">
+                      {t.project && <span className="text-xs text-3">📁 {t.project}</span>}
+                      <span className="text-xs text-3">{(t.updated_at || '').slice(0, 10)} 취소</span>
+                    </div>
+                  </div>
+                  <div className="task-actions">
+                    <button className="btn btn-sm" onClick={() => onStatus(t.id, 'TODO')}>↩ 되살리기</button>
+                    <button className="btn btn-sm btn-danger" onClick={() => onDelete(t.id)}>🗑 삭제</button>
+                  </div>
+                </div>
+              ))
+            }
+          </div>
+        </div>
+      );
+    }
+
+    /* ── ProjectManagerModal ────────────────────────────────────────────────── */
+    function ProjectManagerModal({ projects, onClose, onReload }) {
+      const [name, setName] = useState('');
+      const [color, setColor] = useState('#6366f1');
+
+      const add = async () => {
+        if (!name.trim()) { showToast('이름을 입력하세요'); return; }
+        try {
+          await POST('/api/projects/add', { name: name.trim(), color });
+          showToast('프로젝트 추가! ✓');
+          setName('');
+          onReload();
+        } catch (e) { /* POST already shows toast */ }
+      };
+
+      const del = async (id, projName) => {
+        if (!confirm(`"${projName}" 프로젝트를 삭제할까요?\n(연결된 Task의 프로젝트 정보는 유지됩니다)`)) return;
+        try {
+          await POST(`/api/projects/${id}/delete`, {});
+          showToast('삭제됐어요');
+          onReload();
+        } catch (e) { /* POST already shows toast */ }
+      };
+
+      return (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+          <div className="modal">
+            <div className="modal-title">📁 프로젝트 관리</div>
+            <div className="flex gap8 mb12" style={{ alignItems: 'center' }}>
+              <input value={name} onChange={e => setName(e.target.value)}
+                placeholder="새 프로젝트 이름" style={{ flex: 1 }}
+                onKeyDown={e => e.key === 'Enter' && add()} />
+              <input type="color" value={color} onChange={e => setColor(e.target.value)}
+                style={{ width: 36, height: 36, padding: 2, cursor: 'pointer', border: '1px solid var(--border)', borderRadius: 'var(--radius)', flex: 'none' }} />
+              <button className="btn btn-primary" onClick={add}>+ 추가</button>
+            </div>
+            <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+              {projects.length === 0
+                ? <p className="text-3 text-sm">프로젝트가 없어요.</p>
+                : projects.map(p => (
+                  <div key={p.id} className="flex items-center justify-between"
+                    style={{ padding: '8px 4px', borderBottom: '1px solid var(--border)' }}>
+                    <div className="flex items-center gap8">
+                      <div style={{ width: 10, height: 10, borderRadius: '50%', background: p.color }} />
+                      <span className="text-sm">{p.name}</span>
+                    </div>
+                    <button className="btn btn-sm btn-danger" onClick={() => del(p.id, p.name)}>삭제</button>
+                  </div>
+                ))
+              }
+            </div>
+            <div className="flex justify-end mt12">
+              <button className="btn" onClick={onClose}>닫기</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    /* ── Sidebar ────────────────────────────────────────────────────────────── */
+    function Sidebar({ view, setView, projects, logDates, dark, toggleDark, onProjManage }) {
+      const nav = [
+        { id: 'dashboard', icon: '📋', label: '대시보드' },
+        { id: 'briefing',  icon: '🌅', label: '브리핑' },
+        { id: 'gantt',     icon: '📅', label: '전체 일정' },
+        { id: 'weekly',    icon: '📊', label: '주간 리포트' },
+        { id: 'cleanup',   icon: '🧹', label: 'Task 정리' },
+      ];
+
+      return (
+        <div className="sidebar">
+          <div className="logo">WorkLog ✦</div>
+
+          <MiniCalendar logDates={logDates} />
+
+          <div className="sidebar-sep" />
+
+          <div className="nav-label">메뉴</div>
+          {nav.map(n => (
+            <div key={n.id} className={`nav-item${view === n.id ? ' active' : ''}`}
+              onClick={() => setView(n.id)}>
+              <span>{n.icon}</span>{n.label}
+            </div>
+          ))}
+
+          <div className="sidebar-sep" />
+
+          <div className="flex justify-between items-center" style={{ padding: '0 8px 2px' }}>
+            <div className="nav-label" style={{ padding: 0 }}>프로젝트</div>
+            <button className="mini-cal-nav" onClick={onProjManage} title="관리">⊕</button>
+          </div>
+          {projects.slice(0, 10).map(p => (
+            <div key={p.id} className="project-item">
+              <div className="project-dot" style={{ background: p.color }} />
+              <span className="text-ellipsis">{p.name}</span>
+            </div>
+          ))}
+
+          <div style={{ flex: 1 }} />
+
+          <div className="dark-toggle" onClick={toggleDark}>
+            <span>{dark ? '🌙 다크' : '☀️ 라이트'}</span>
+            <div className={`toggle-sw${dark ? ' on' : ''}`}>
+              <div className="toggle-thumb" />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    /* ══════════════════════════════════════════════════════════════════════════
+       ROOT APP
+    ══════════════════════════════════════════════════════════════════════════ */
+    function App() {
+      const [view, setView] = useState('dashboard');
+      const [tasks, setTasks] = useState([]);
+      const [projects, setProjects] = useState([]);
+      const [heatmap, setHeatmap] = useState([]);
+      const [logDates, setLogDates] = useState([]);
+      const [dark, setDark] = useState(() => localStorage.getItem('wl-dark') === 'true');
+      const [showProjMgr, setShowProjMgr] = useState(false);
+
+      useEffect(() => {
+        const html = document.getElementById('html-root');
+        html.setAttribute('data-dark', dark ? 'true' : 'false');
+        localStorage.setItem('wl-dark', dark ? 'true' : 'false');
+      }, [dark]);
+
+      const loadTasks = useCallback(() =>
+        GET('/api/tasks/all').then(setTasks), []);
+
+      const loadProjects = useCallback(() =>
+        GET('/api/projects').then(setProjects), []);
+
+      const loadHeatmap = useCallback(() =>
+        GET('/api/heatmap?days=35').then(setHeatmap), []);
+
+      const loadLogDates = useCallback(async () => {
+        const now = new Date();
+        const y = now.getFullYear(), m = now.getMonth() + 1;
+        const [cur, prev] = await Promise.all([
+          GET(`/api/journals/dates?year=${y}&month=${m}`),
+          m === 1
+            ? GET(`/api/journals/dates?year=${y - 1}&month=12`)
+            : GET(`/api/journals/dates?year=${y}&month=${m - 1}`)
+        ]);
+        setLogDates([...cur, ...prev]);
+      }, []);
+
+      const reload = useCallback(() => {
+        loadTasks();
+        loadHeatmap();
+      }, [loadTasks, loadHeatmap]);
+
+      useEffect(() => {
+        loadTasks();
+        loadProjects();
+        loadHeatmap();
+        loadLogDates();
+      }, []);
+
+      return (
+        <Fragment>
+          <Sidebar
+            view={view} setView={setView}
+            projects={projects} logDates={logDates}
+            dark={dark} toggleDark={() => setDark(d => !d)}
+            onProjManage={() => setShowProjMgr(true)}
+          />
+
+          <div className="main">
+            {view === 'dashboard' && <DashboardView tasks={tasks} projects={projects} heatmap={heatmap} reload={reload} />}
+            {view === 'briefing'  && <BriefingView  tasks={tasks} reload={reload} />}
+            {view === 'gantt'     && <GanttView     tasks={tasks} projects={projects} reload={reload} />}
+            {view === 'weekly'    && <WeeklyView    heatmap={heatmap} />}
+            {view === 'cleanup'   && <CleanupView   tasks={tasks} reload={reload} />}
+          </div>
+
+          {showProjMgr && (
+            <ProjectManagerModal
+              projects={projects}
+              onClose={() => setShowProjMgr(false)}
+              onReload={loadProjects}
+            />
+          )}
+        </Fragment>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

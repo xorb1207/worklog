@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+{% block title %}Task 관리 — WorkLog{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>✅ Task 관리</h1>
+  <p>전체 할 일 · 진행 중/대기 {{ active|length }}개</p>
+</div>
+
+{% if stale %}
+<div class="alert alert-amber">
+  <span>⏳</span>
+  <div>
+    <strong>오래 방치된 Task들, 아직 진행 중인가요?</strong>
+    {% for t in stale %}
+    <div class="mt4">· {{ t.title }} — {{ t.updated_at[:10] }} 이후 미변경</div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- 새 Task 추가 -->
+<div class="card">
+  <div class="card-title">➕ 새 Task</div>
+  <input id="t-title" placeholder="할 일 제목 *" style="margin-bottom:8px;">
+  <div class="grid-3" style="margin-bottom:8px;">
+    <select id="t-priority">
+      <option value="A">🔴 A 우선</option>
+      <option value="B" selected>🟡 B 우선</option>
+      <option value="C">⚪ C 우선</option>
+    </select>
+    <select id="t-project" onchange="handleProjectSelect(this)"></select>
+    <div class="date-picker-wrap">
+      <input id="t-deadline" type="date">
+    </div>
+  </div>
+  <textarea id="t-note" placeholder="메모 (선택)" rows="2" style="margin-bottom:8px;"></textarea>
+  <button class="btn btn-primary" onclick="addTask()">+ 추가</button>
+</div>
+
+<!-- 진행 중 / 대기 목록 -->
+<div class="card">
+  <div class="card-title flex justify-between items-center">
+    <span>진행 중 / 대기 중</span>
+    <div class="flex gap8">
+      <select id="filter-status" onchange="filterTasks()" style="width:auto; padding:4px 8px; font-size:12px;">
+        <option value="all">전체 상태</option>
+        <option value="TODO">TODO</option>
+        <option value="DOING">DOING</option>
+      </select>
+      <select id="filter-priority" onchange="filterTasks()" style="width:auto; padding:4px 8px; font-size:12px;">
+        <option value="all">전체 우선순위</option>
+        <option value="A">A</option>
+        <option value="B">B</option>
+        <option value="C">C</option>
+      </select>
+    </div>
+  </div>
+  <div id="active-list">
+  {% if active %}
+    {% for t in active %}
+    <div class="task-row"
+         data-status="{{ t.status }}"
+         data-priority="{{ t.priority }}"
+         data-id="{{ t.id }}"
+         data-title="{{ t.title | e }}"
+         data-project="{{ t.project | e }}"
+         data-deadline="{{ t.deadline or '' }}"
+         data-note="{{ t.note | e }}"
+         id="tr-{{ t.id }}">
+      <div style="flex:1; min-width:0;">
+        <div class="flex items-center gap8" style="margin-bottom:4px; flex-wrap:wrap;">
+          <span class="badge badge-{{ t.priority|lower }}">{{ t.priority }}</span>
+          <span class="badge badge-{{ t.status|lower }}">{{ t.status }}</span>
+          <span class="font-medium">{{ t.title }}</span>
+        </div>
+        <div class="task-meta">
+          {% if t.project %}<span>📁 {{ t.project }}</span>{% endif %}
+          {% if t.deadline %}<span>📅 {{ t.deadline }}</span>{% endif %}
+          {% if t.note %}<span>📌 {{ t.note[:40] }}{% if t.note|length > 40 %}…{% endif %}</span>{% endif %}
+          <span>{{ t.created_at[:10] }} 등록</span>
+        </div>
+      </div>
+      <div class="flex gap8" style="flex-shrink:0;">
+        {% if t.status == 'TODO' %}
+          <button class="btn btn-sm" title="진행 중으로" onclick="setStatus({{ t.id }},'DOING')">▶</button>
+        {% else %}
+          <button class="btn btn-sm" title="대기로" onclick="setStatus({{ t.id }},'TODO')">⏸</button>
+        {% endif %}
+        <button class="btn btn-sm btn-primary" title="완료" onclick="setStatus({{ t.id }},'DONE')">✓</button>
+        <button class="btn btn-sm" title="수정" onclick="openEdit({{ t.id }})">✏</button>
+        <button class="btn btn-sm" title="취소" onclick="setStatus({{ t.id }},'CANCELLED')" style="color:var(--red);">✕</button>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <p class="text-3 text-sm" style="padding:12px 0;">할 일이 없어요! 🎉</p>
+  {% endif %}
+  </div>
+</div>
+
+<!-- 완료된 Task -->
+<div class="card">
+  <div class="card-title">완료된 Task <span class="text-3">({{ done_list|length }}개)</span></div>
+  {% for t in done_list[:20] %}
+  <div class="task-row" style="opacity:.55;">
+    <div style="flex:1; min-width:0;">
+      <div class="flex items-center gap8">
+        <span class="badge badge-done">DONE</span>
+        <span class="line-through">{{ t.title }}</span>
+      </div>
+      <div class="task-meta">
+        {% if t.project %}<span>📁 {{ t.project }}</span>{% endif %}
+        <span>{{ t.updated_at[:10] }} 완료</span>
+      </div>
+    </div>
+    <div class="flex gap8" style="flex-shrink:0;">
+      <button class="btn btn-sm" onclick="setStatus({{ t.id }},'TODO')" title="되돌리기">↩</button>
+      <button class="btn btn-sm" onclick="deleteTask({{ t.id }})" title="삭제" style="color:var(--red);">🗑</button>
+    </div>
+  </div>
+  {% endfor %}
+  {% if done_list|length > 20 %}
+  <p class="text-3 text-sm mt8">외 {{ done_list|length - 20 }}개 더 있음</p>
+  {% endif %}
+</div>
+
+<!-- 수정 모달 -->
+<div id="edit-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:100; align-items:center; justify-content:center;">
+  <div style="background:var(--surface); border-radius:var(--radius-lg); padding:24px; width:440px; max-width:90vw; box-shadow:var(--shadow-md);">
+    <div class="font-semibold" style="margin-bottom:16px; font-size:15px;">✏ Task 수정</div>
+    <input type="hidden" id="edit-id">
+    <input id="edit-title" placeholder="제목 *" style="margin-bottom:8px;">
+    <div class="grid-2" style="margin-bottom:8px;">
+      <select id="edit-priority">
+        <option value="A">🔴 A 우선</option>
+        <option value="B">🟡 B 우선</option>
+        <option value="C">⚪ C 우선</option>
+      </select>
+      <div class="date-picker-wrap">
+        <input id="edit-deadline" type="date">
+      </div>
+    </div>
+    <select id="edit-project" onchange="handleProjectSelect(this)" style="margin-bottom:8px;"></select>
+    <textarea id="edit-note" placeholder="메모 (선택)" rows="2" style="margin-bottom:16px;"></textarea>
+    <div class="flex gap8 justify-between">
+      <button class="btn" onclick="closeEdit()">취소</button>
+      <button class="btn btn-primary" onclick="saveEdit()">저장</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* ── 프로젝트 드롭다운 초기화 ── */
+loadProjects(document.getElementById('t-project'));
+
+/* ── Task 추가 ── */
+async function addTask() {
+  const title = document.getElementById('t-title').value.trim();
+  if (!title) { toast('제목을 입력하세요.'); return; }
+  const pSel = document.getElementById('t-project');
+  const project = pSel.value === '__add__' ? '' : pSel.value;
+  await api('/tasks/add', {
+    title,
+    priority: document.getElementById('t-priority').value,
+    project,
+    deadline: document.getElementById('t-deadline').value || null,
+    note:     document.getElementById('t-note').value
+  });
+  toast('추가됐어요! ✓');
+  setTimeout(() => location.reload(), 600);
+}
+
+/* ── 상태 변경 ── */
+async function setStatus(id, status) {
+  await api(`/tasks/${id}/status`, { status });
+  toast({ DONE:'완료! ✓', DOING:'진행 중으로', TODO:'대기 중으로', CANCELLED:'취소됨' }[status] || '변경됐어요');
+  setTimeout(() => location.reload(), 500);
+}
+
+/* ── 삭제 ── */
+async function deleteTask(id) {
+  if (!confirm('이 Task를 삭제할까요?')) return;
+  await api(`/tasks/${id}/delete`, {});
+  toast('삭제됐어요.');
+  setTimeout(() => location.reload(), 500);
+}
+
+/* ── 필터 ── */
+function filterTasks() {
+  const fs = document.getElementById('filter-status').value;
+  const fp = document.getElementById('filter-priority').value;
+  document.querySelectorAll('#active-list .task-row').forEach(row => {
+    const okS = fs === 'all' || row.dataset.status === fs;
+    const okP = fp === 'all' || row.dataset.priority === fp;
+    row.style.display = (okS && okP) ? '' : 'none';
+  });
+}
+
+/* ── 수정 모달 ── */
+async function openEdit(id) {
+  const row = document.querySelector(`[data-id="${id}"]`);
+  document.getElementById('edit-id').value = id;
+  document.getElementById('edit-title').value = row.dataset.title;
+  document.getElementById('edit-priority').value = row.dataset.priority;
+  document.getElementById('edit-deadline').value = row.dataset.deadline;
+  document.getElementById('edit-note').value = row.dataset.note;
+  const projSel = document.getElementById('edit-project');
+  await loadProjects(projSel, row.dataset.project);
+  document.getElementById('edit-modal').style.display = 'flex';
+  document.getElementById('edit-title').focus();
+}
+function closeEdit() {
+  document.getElementById('edit-modal').style.display = 'none';
+}
+async function saveEdit() {
+  const id = document.getElementById('edit-id').value;
+  const pSel = document.getElementById('edit-project');
+  const project = pSel.value === '__add__' ? '' : pSel.value;
+  await api(`/tasks/${id}/edit`, {
+    title:    document.getElementById('edit-title').value.trim(),
+    priority: document.getElementById('edit-priority').value,
+    project,
+    deadline: document.getElementById('edit-deadline').value || null,
+    note:     document.getElementById('edit-note').value
+  });
+  toast('저장됐어요! ✓');
+  closeEdit();
+  setTimeout(() => location.reload(), 500);
+}
+
+/* ── 모달 바깥 클릭으로 닫기 ── */
+document.getElementById('edit-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('edit-modal')) closeEdit();
+});
+
+/* ── Enter 키 ── */
+document.getElementById('t-title').addEventListener('keydown', e => {
+  if (e.key === 'Enter') addTask();
+});
+document.getElementById('edit-title').addEventListener('keydown', e => {
+  if (e.key === 'Enter') saveEdit();
+});
+</script>
+{% endblock %}

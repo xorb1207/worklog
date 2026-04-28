@@ -1,0 +1,18 @@
+# 업무 자동화 (WorkLog) — 폐쇄망 배포용 잠금 의존성
+# 타겟: Windows Pro / Python 3.12
+#
+# 외부망 PC에서 wheel 다운로드:
+#   pip download -r requirements.txt -d wheels/ ^
+#       --platform win_amd64 --python-version 3.12 ^
+#       --only-binary=:all:
+#
+# 폐쇄망 설치:
+#   pip install --no-index --find-links wheels/ -r requirements.txt
+
+# 필수 (현재 코드 사용)
+flask==3.1.3
+
+# 트레이 앱 / 단축키 — Phase 5 운영 편의 (Windows 전용, 향후 사용)
+pystray==0.19.5
+pillow==11.1.0
+keyboard==0.13.5
