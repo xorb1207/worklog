@@ -31,11 +31,12 @@
 ```
 design_handoff_worklog/
 ├── README.md                        ← 본 문서
+├── CHANGELOG.md                     ← v3 → v4 변경점 (최신, 우선 확인)
 ├── API_CONTRACT.md                  ← 프론트가 호출하는 모든 엔드포인트 명세
 ├── DEBUG_FINDINGS.md                ← 코드 리뷰로 발견한 디버깅 포인트
 ├── NEXT_STEPS.md                    ← 클로드 코드에서 이어서 할 작업 체크리스트
 ├── templates/
-│   └── react_app.html               ← 메인 SPA (Flask가 이 파일을 / 라우트에서 서빙)
+│   └── react_app.html               ← 메인 SPA v4 (Flask가 이 파일을 / 라우트에서 서빙)
 └── reference/
     ├── WorkLog App.html             ← v1 (참고)
     ├── WorkLog App v2.html          ← v2 (참고)
@@ -43,6 +44,13 @@ design_handoff_worklog/
     ├── Excel Import.html            ← 엑셀 임포트 모달 단독 디자인
     └── wireframes.html              ← 초기 와이어프레임
 ```
+
+> **⚠️ v4 사용 시 반드시 `CHANGELOG.md` 먼저 읽으세요.** v3 대비 다음이 바뀌었습니다:
+> - WEEKS 하드코딩 제거 (간트 동적 확장 + 오늘 자동 스크롤)
+> - 주간 리포트 뷰 제거 (대시보드 흡수)
+> - 간트 ↔ Task 자동 연동 + "일지에 기록"/"일정에서 제거" 액션
+> - Tweaks 패널 추가 (디자인 토글)
+> - 다수 race condition / 정렬 버그 수정
 
 ## Screens / Views
 
