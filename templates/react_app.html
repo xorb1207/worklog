@@ -524,28 +524,6 @@ body {
 </style>
 </head>
 <body>
-<!-- tweaks-panel.jsx 가 별도 핸드오프에 누락돼 있어 useTweaks 훅을 인라인 stub으로 정의.
-     Babel-in-browser는 <script type="text/babel"> 블록을 각각 독립 스코프로 컴파일하므로
-     window 에 붙여야 메인 앱 블록에서 보인다. 동작은 동일 (localStorage 영속화). -->
-<script type="text/babel">
-window.useTweaks = function useTweaks(defaults) {
-  const KEY = 'worklog.tweaks';
-  const [values, setValues] = React.useState(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem(KEY) || 'null');
-      return { ...defaults, ...(saved || {}) };
-    } catch (_) { return defaults; }
-  });
-  const setTweak = React.useCallback((key, val) => {
-    setValues((prev) => {
-      const next = { ...prev, [key]: val };
-      try { localStorage.setItem(KEY, JSON.stringify(next)); } catch (_) {}
-      return next;
-    });
-  }, []);
-  return [values, setTweak];
-};
-</script>
 <script type="text/babel">
 
 
@@ -3190,6 +3168,78 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "density": "compact",
   "voice": "soft"
 } /*EDITMODE-END*/;
+
+/* ─── Tweaks stubs (원래 tweaks-panel.jsx 에 있던 컴포넌트들 — 핸드오프 누락분 인라인 대체) ─── */
+function useTweaks(defaults) {
+  const KEY = 'worklog.tweaks';
+  const [values, setValues] = React.useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(KEY) || 'null');
+      return { ...defaults, ...(saved || {}) };
+    } catch (_) { return defaults; }
+  });
+  const setTweak = React.useCallback((key, val) => {
+    setValues((prev) => {
+      const next = { ...prev, [key]: val };
+      try { localStorage.setItem(KEY, JSON.stringify(next)); } catch (_) {}
+      return next;
+    });
+  }, []);
+  return [values, setTweak];
+}
+
+function TweaksPanel({ title, children }) {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <div style={{
+      position: 'fixed', bottom: 16, right: 16, zIndex: 9999,
+      background: 'rgba(245,241,236,0.96)', border: '1px solid rgba(0,0,0,0.1)',
+      borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
+      backdropFilter: 'blur(8px)', font: '500 11px/1.4 system-ui, sans-serif',
+      color: '#29261b', maxWidth: 240
+    }}>
+      <button onClick={() => setOpen((o) => !o)} style={{
+        width: '100%', padding: '8px 12px', background: 'transparent',
+        border: 0, borderBottom: open ? '1px solid rgba(0,0,0,0.08)' : 0,
+        cursor: 'pointer', textAlign: 'left', font: 'inherit',
+        color: 'inherit', display: 'flex', justifyContent: 'space-between'
+      }}>
+        <span>⚙ {title}</span>
+        <span style={{ opacity: 0.5 }}>{open ? '▾' : '▸'}</span>
+      </button>
+      {open && <div style={{ padding: '8px 12px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>{children}</div>}
+    </div>);
+}
+
+function TweakSection({ label }) {
+  return (
+    <div style={{
+      fontSize: 9, fontWeight: 600, letterSpacing: 0.6,
+      textTransform: 'uppercase', opacity: 0.5, marginTop: 4
+    }}>{label}</div>);
+}
+
+function TweakRadio({ label, value, options, onChange }) {
+  return (
+    <div>
+      <div style={{ fontSize: 10, opacity: 0.7, marginBottom: 4 }}>{label}</div>
+      <div style={{ display: 'flex', gap: 4 }}>
+        {options.map((opt) => (
+          <button key={opt.value}
+            onClick={() => onChange(opt.value)}
+            style={{
+              flex: 1, padding: '4px 6px', fontSize: 10,
+              background: value === opt.value ? '#29261b' : 'transparent',
+              color: value === opt.value ? '#f5f1ec' : '#29261b',
+              border: '1px solid rgba(0,0,0,0.15)', borderRadius: 4,
+              cursor: 'pointer', font: 'inherit'
+            }}>
+            {opt.label}
+          </button>
+        ))}
+      </div>
+    </div>);
+}
 
 function TweaksUI({ values, setTweak }) {
   React.useEffect(() => {
