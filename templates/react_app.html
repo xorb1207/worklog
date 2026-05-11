@@ -525,10 +525,10 @@ body {
 </head>
 <body>
 <!-- tweaks-panel.jsx 가 별도 핸드오프에 누락돼 있어 useTweaks 훅을 인라인 stub으로 정의.
-     동작은 동일 (localStorage 영속화). 운영 빌드에서 Tweaks 패널 전체를 빼고 싶으면
-     이 블록과 <TweaksUI .../> 호출, TWEAK_DEFAULTS 까지 제거. -->
+     Babel-in-browser는 <script type="text/babel"> 블록을 각각 독립 스코프로 컴파일하므로
+     window 에 붙여야 메인 앱 블록에서 보인다. 동작은 동일 (localStorage 영속화). -->
 <script type="text/babel">
-function useTweaks(defaults) {
+window.useTweaks = function useTweaks(defaults) {
   const KEY = 'worklog.tweaks';
   const [values, setValues] = React.useState(() => {
     try {
@@ -544,7 +544,7 @@ function useTweaks(defaults) {
     });
   }, []);
   return [values, setTweak];
-}
+};
 </script>
 <script type="text/babel">
 
