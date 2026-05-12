@@ -524,6 +524,7 @@ body {
 </head>
 <body>
 <script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="journal-fold.jsx"></script>
 <script type="text/babel">
 
 
@@ -1117,6 +1118,12 @@ function Dashboard({ tasks, setTasks, projFilter, projects, selectedDate, setSel
   }, [journals, selectedDate]);
 
   const [saveStatus, setSaveStatus] = useState('✓ 자동저장됨');
+  const [foldMode, setFoldMode] = useState(() => {
+    /* 기본 접기 모드 ON — 헤더가 있으면 항상 접기 가능, /task 슬래시 명령은 평문 모드에서 */
+    try { const v = localStorage.getItem('worklog.journal.foldModeDefault'); return v === null ? true : v === 'true'; }
+    catch (e) { return true; }
+  });
+  React.useEffect(() => { try { localStorage.setItem('worklog.journal.foldModeDefault', String(foldMode)); } catch (e) {} }, [foldMode]);
   const saveTimer = useRef(null);
   const [activeTag, setActiveTag] = useState(null); // 클릭된 태그 (모든 날짜에서 해당 태그 줄 모아보기)
 
@@ -1626,7 +1633,10 @@ function Dashboard({ tasks, setTasks, projFilter, projects, selectedDate, setSel
             {selectedDate !== TODAY &&
           <button className="btn btn-sm" onClick={() => setSelectedDate(TODAY)} style={{ fontSize: 10 }}>오늘로</button>
           }
-            <button className="btn btn-primary btn-sm" style={{ marginLeft: 'auto' }} onClick={manualSave}>💾 저장</button>
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+              <button className="btn btn-sm" onClick={() => setFoldMode((v) => !v)} title="/task 슬래시 명령이 필요할 때만 평문으로 전환" style={{ fontSize: 10, opacity: foldMode ? 0.6 : 1 }}>{foldMode ? '⌨ 평문' : '🗂 접기로'}</button>
+              <button className="btn btn-primary btn-sm" onClick={manualSave}>💾 저장</button>
+            </div>
           </div>
           {selectedDate !== TODAY &&
         <div style={{ fontSize: 11, color: 'var(--text-3)', padding: '6px 10px', marginBottom: 6, borderRadius: 4, background: 'var(--surface-2)', borderLeft: '3px solid var(--accent)' }}>
@@ -1634,6 +1644,13 @@ function Dashboard({ tasks, setTasks, projFilter, projects, selectedDate, setSel
             </div>
         }
           <div style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column' }}>
+          {foldMode && window.JournalFoldView ?
+          <window.JournalFoldView text={journalText} dateKey={selectedDate} onChange={(v) => {
+            setJournalText(v);
+            setSaveStatus('편집 중...');
+            clearTimeout(saveTimer.current);
+            saveTimer.current = setTimeout(() => setSaveStatus('✓ 자동저장됨'), 2000);
+          }} /> :
           <textarea className="journal-textarea"
           ref={journalRef}
           value={journalText}
@@ -1641,8 +1658,8 @@ function Dashboard({ tasks, setTasks, projFilter, projects, selectedDate, setSel
           onKeyDown={onJournalKeyDown}
           onClick={onJournalClick}
           placeholder={`오늘 한 일, 회의 내용, 이슈 등을 자유롭게 기록하세요.\n\n팁:\n• /task 제목  →  Enter로 Task 즉시 생성 (오늘 일지면 자동 시작 ▶)\n  예: /task 보고서 초안 !A ~5/10 @보고서)\n• "- " 치고 엔터 → 다음 줄도 자동 리스트\n• "- [ ] " 치고 엔터 → 체크박스 리스트\n• ⌘/Ctrl + 클릭 → 체크박스 토글`} />
-          
-          {slashCmd &&
+          }
+          {!foldMode && slashCmd &&
           <div style={{ position: 'absolute', bottom: 10, left: 10, right: 10, background: 'var(--text)', color: 'var(--surface)', borderRadius: 8, padding: '10px 14px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 10, zIndex: 50, boxShadow: '0 8px 24px rgba(0,0,0,.18)' }}>
               <span style={{ fontSize: 16 }}>📌</span>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -1655,7 +1672,7 @@ function Dashboard({ tasks, setTasks, projFilter, projects, selectedDate, setSel
               </div>
             </div>
           }
-          {tagSuggest && tagSuggest.tags.length > 0 &&
+          {!foldMode && tagSuggest && tagSuggest.tags.length > 0 &&
           <div style={{ position: 'absolute', top: 0, left: 0, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, boxShadow: '0 8px 24px rgba(0,0,0,.12)', padding: 4, minWidth: 160, zIndex: 50 }}>
               <div style={{ fontSize: 9, color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: '.5px', padding: '4px 8px 2px' }}>태그 추천</div>
               {tagSuggest.tags.map((t) =>
@@ -2289,8 +2306,28 @@ function GanttView({ projFilter, onImport, tasks = [], setSelectedDate, setView,
   const [prioFilter, setPrioFilter] = useState('전체');
   const [zoom, setZoom] = useState(80); // 주당 px 너비
   const [selectedId, setSelectedId] = useState(null);
-  const [items, setItems] = useState(GANTT_DATA);
-  const [hiddenTaskIds, setHiddenTaskIds] = useState(() => new Set());
+  /* 시드 일정 — 제거 결과를 localStorage에 영속화 (탭 이동 시 초기화 방지) */
+  const [items, setItems] = useState(() => {
+    try {
+      const removed = new Set(JSON.parse(localStorage.getItem('worklog.gantt.removedSeedIds') || '[]'));
+      const overrides = JSON.parse(localStorage.getItem('worklog.gantt.seedOverrides') || '{}');
+      return GANTT_DATA.filter((g) => !removed.has(g.id)).map((g) => overrides[g.id] ? { ...g, ...overrides[g.id] } : g);
+    } catch (e) { return GANTT_DATA; }
+  });
+  /* task 기반 일정 — 숨김 처리도 영속화 */
+  const [hiddenTaskIds, setHiddenTaskIds] = useState(() => {
+    try {
+      const arr = JSON.parse(localStorage.getItem('worklog.gantt.hiddenTaskIds') || '[]');
+      return new Set(Array.isArray(arr) ? arr : []);
+    } catch (e) { return new Set(); }
+  });
+  /* task 기반 일정의 진행률 — items에 없으므로 별도 저장 */
+  const [taskProgress, setTaskProgress] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('worklog.gantt.taskProgress') || '{}'); }
+    catch (e) { return {}; }
+  });
+  useEffect(() => { localStorage.setItem('worklog.gantt.hiddenTaskIds', JSON.stringify([...hiddenTaskIds])); }, [hiddenTaskIds]);
+  useEffect(() => { localStorage.setItem('worklog.gantt.taskProgress', JSON.stringify(taskProgress)); }, [taskProgress]);
   const chartScrollRef = React.useRef(null);
   const didScrollToTodayRef = React.useRef(false);
 
@@ -2334,6 +2371,7 @@ function GanttView({ projFilter, onImport, tasks = [], setSelectedDate, setView,
   map((t) => {
     const startW = Math.max(0, ymdToWeekIdx(t.createdAt) ?? 0);
     const endW = Math.max(startW, ymdToWeekIdx(t.deadline) ?? startW);
+    const overrideProg = taskProgress[t.id];
     return {
       id: `task-${t.id}`,
       _taskId: t.id,
@@ -2342,7 +2380,7 @@ function GanttView({ projFilter, onImport, tasks = [], setSelectedDate, setView,
       startWeek: startW,
       endWeek: Math.min(endW, WEEKS.length - 1),
       priority: t.priority || 'B',
-      done: t.status === 'DOING' ? 50 : 0,
+      done: typeof overrideProg === 'number' ? overrideProg : (t.status === 'DOING' ? 50 : 0),
       _isTask: true,
       _journalDate: t.journalDate
     };
@@ -2402,7 +2440,23 @@ function GanttView({ projFilter, onImport, tasks = [], setSelectedDate, setView,
   }
 
   function updateProgress(id, val) {
-    setItems((prev) => prev.map((t) => t.id === id ? { ...t, done: Math.max(0, Math.min(100, val)) } : t));
+    const v = Math.max(0, Math.min(100, val));
+    /* task 기반 항목 — taskProgress에 저장 (id 형태: 'task-{taskId}') */
+    if (typeof id === 'string' && id.startsWith('task-')) {
+      const tid = parseInt(id.slice(5), 10);
+      setTaskProgress((prev) => ({ ...prev, [tid]: v }));
+      return;
+    }
+    /* 시드 항목 — items 업데이트 + localStorage override 저장 */
+    setItems((prev) => {
+      const next = prev.map((t) => t.id === id ? { ...t, done: v } : t);
+      try {
+        const ov = JSON.parse(localStorage.getItem('worklog.gantt.seedOverrides') || '{}');
+        ov[id] = { ...(ov[id] || {}), done: v };
+        localStorage.setItem('worklog.gantt.seedOverrides', JSON.stringify(ov));
+      } catch (e) {}
+      return next;
+    });
   }
 
   /* 액션: 일지에 기록 — 해당 task의 journalDate(또는 오늘)로 이동 + 체크리스트 항목 append */
@@ -2428,6 +2482,12 @@ function GanttView({ projFilter, onImport, tasks = [], setSelectedDate, setView,
       toast(`✕ "${item.name}" 일정에서 숨김 (할일은 그대로 유지)`, { duration: 3000 });
     } else {
       setItems((prev) => prev.filter((t) => t.id !== item.id));
+      /* 시드 항목 제거를 localStorage에 영속화 — 탭 이동/새로고침 후에도 유지 */
+      try {
+        const removed = new Set(JSON.parse(localStorage.getItem('worklog.gantt.removedSeedIds') || '[]'));
+        removed.add(item.id);
+        localStorage.setItem('worklog.gantt.removedSeedIds', JSON.stringify([...removed]));
+      } catch (e) {}
       toast(`✕ "${item.name}" 일정에서 제거됨`, { duration: 2500 });
     }
     setSelectedId(null);
@@ -3179,10 +3239,10 @@ function ShortcutsModal({ onClose }) {
 
 /* ─── Tweaks (mood / density / voice) ─── */
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
-  "mood": "paper",
+  "mood": "graphite",
   "density": "compact",
   "voice": "soft"
-} /*EDITMODE-END*/;
+}/*EDITMODE-END*/;
 
 function TweaksUI({ values, setTweak }) {
   React.useEffect(() => {

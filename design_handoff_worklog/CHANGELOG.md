@@ -4,7 +4,37 @@
 
 ---
 
-## 새 기능
+## 최신 패치 (2026-05-12)
+
+### 일지 마크다운 헤더 접기 (Obsidian-style)
+- **목적**: 메일 본문/긴 텍스트가 일지에 들어가면 전체 가독성이 나빠짐 → 헤더 단위로 접기
+- **구현 파일**: `templates/journal-fold.jsx` (별도 컴포넌트, `<script type="text/babel" src="journal-fold.jsx">` 로 로드)
+- **동작**:
+  - 일지 본문을 `^#{1,6}\s` 패턴으로 섹션 분할 (헤더 없는 본문은 preamble로 처리)
+  - 헤더 줄 좌측 `▶/▼` chevron 클릭으로 fold 토글
+  - 헤더 텍스트는 항상 편집 가능 (별도 input)
+  - 본문은 접혔을 때만 숨김, 펼친 상태는 항상 textarea로 직접 편집
+  - 본문이 6줄 이상이면 자동 접힘 (기본값)
+  - 접힘 상태는 `worklog.fold.<date>` 로 localStorage 저장
+- **기본 모드**: 접기 모드가 **default ON** (`worklog.journal.foldModeDefault`)
+- **escape hatch**: 우측 상단 `⌨ 평문` 버튼으로 단일 textarea로 복귀 (`/task` 슬래시 명령, 태그 추천이 필요할 때)
+- **상위 컴포넌트 인터페이스**:
+  ```js
+  <JournalFoldView text={journalText} dateKey={selectedDate} onChange={(v) => ...} />
+  ```
+  내부 변경마다 전체 텍스트를 재조합해 `onChange`로 흘려주므로 상위는 기존 자동저장 흐름 그대로 사용 가능
+
+### 전체 일정(간트) 진행률 스크롤 동기화
+- 좌측 names 컬럼이 차트 스크롤과 동기화되지 않던 버그 수정
+- 영향 코드: `GanttView` 내 `chartScrollRef` + `namesScrollRef` 양방향 sync
+
+### 전체 일정에서 "일정에서 제거"가 적용 안 되던 시드 항목
+- **이전**: 모듈 상수 `items` 의 시드 항목은 제거 버튼 눌러도 다시 나타남
+- **수정**: hidden id Set을 localStorage(`worklog.gantt.hidden`)에 영속화
+
+---
+
+## 새 기능 (v3 → v4)
 
 ### 1. Tweaks 패널 (디자인 토글)
 - 우측 하단 플로팅 패널 — 디자인 시스템을 런타임에 조정

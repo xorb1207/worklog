@@ -36,7 +36,9 @@ design_handoff_worklog/
 ├── DEBUG_FINDINGS.md                ← 코드 리뷰로 발견한 디버깅 포인트
 ├── NEXT_STEPS.md                    ← 클로드 코드에서 이어서 할 작업 체크리스트
 ├── templates/
-│   └── react_app.html               ← 메인 SPA v4 (Flask가 이 파일을 / 라우트에서 서빙)
+│   ├── react_app.html               ← 메인 SPA v4-tweakable (Flask가 / 라우트에서 서빙)
+│   ├── journal-fold.jsx             ← 마크다운 헤더 기반 접기 에디터 (Obsidian-스타일)
+│   └── tweaks-panel.jsx             ← 디자인 토글 패널 (개발용; 프로덕션에선 빼도 됨)
 └── reference/
     ├── WorkLog App.html             ← v1 (참고)
     ├── WorkLog App v2.html          ← v2 (참고)
@@ -90,13 +92,25 @@ design_handoff_worklog/
 
 ## Interactions & Behavior
 
-### 일지(Journal) Textarea — 핵심 UX
-- **자동저장**: 600ms 디바운스 → `POST /journal/save`
-- **마크다운 리스트 자동 이어쓰기**: `- `, `* `, `- [ ] `, `- [x] ` 패턴 자동 prefix; 빈 항목 Enter는 종료
-- **들여쓰기**: Tab/Shift+Tab (멀티라인 선택 지원)
-- **체크박스 토글**: `⌘/Ctrl + Click`
-- **태그 자동완성**: `#` 입력 시 빈도순 상위 6개 노출, Enter/Tab 삽입, Esc 닫기
-- **IME 안전**: `e.isComposing`, `e.keyCode !== 229` 체크
+### 일지(Journal) 에디터 — 핵심 UX
+**기본 = 접기 모드 (Obsidian-스타일)** — `journal-fold.jsx`가 렌더링
+- 마크다운 헤더(`#`, `##`, `###`)를 만나면 그 줄에 `▼/▶` chevron 자동 생성
+- chevron 클릭 → 해당 섹션 본문만 접힘 (헤더는 항상 편집 가능, 타이핑 가능)
+- `▶ 모두 접기` / `▼ 모두 펼치기` 일괄 토글
+- 본문 6줄 이상이면 자동 접힘 (디폴트, 옵션으로 끌 수 있게 만들어도 됨)
+- 접힘 상태는 날짜별 localStorage(`worklog.journal.folded.<date>`)
+- 헤더/본문 모두 inline 편집; 새 섹션 추가/삭제 버튼
+
+**평문 모드 (escape hatch)** — 우상단 `⌨ 평문` 버튼으로 전환
+- 단일 textarea — 자동저장 600ms 디바운스 → `POST /journal/save`
+- `/task 제목` 슬래시 명령 → Enter로 Task 즉시 생성 (오늘 일지면 자동 DOING)
+- 마크다운 리스트 자동 이어쓰기 (`- `, `* `, `- [ ] `, `- [x] `)
+- 들여쓰기 Tab/Shift+Tab (멀티라인 선택 지원)
+- 체크박스 토글: `⌘/Ctrl + Click`
+- 태그 자동완성: `#` 입력 시 빈도순 상위 6개, Enter/Tab 삽입, Esc 닫기
+- IME 안전: `e.isComposing`, `e.keyCode !== 229` 체크
+
+> 기본값은 localStorage(`worklog.journal.foldModeDefault`)에 저장됨 — 한 번 평문으로 바꾸면 다음에도 평문
 
 ### Task 추가
 - DOING이 5개 이상이면 새 Task는 자동으로 TODO로 들어감(토스트 안내)

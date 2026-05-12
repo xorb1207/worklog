@@ -530,6 +530,632 @@ body {
 
 const { useState, useRef, useEffect, useCallback } = React;
 
+/* ─── inlined from tweaks-panel.jsx ─── */
+
+// tweaks-panel.jsx
+// Reusable Tweaks shell + form-control helpers.
+//
+// Owns the host protocol (listens for __activate_edit_mode / __deactivate_edit_mode,
+// posts __edit_mode_available / __edit_mode_set_keys / __edit_mode_dismissed) so
+// individual prototypes don't re-roll it. Ships a consistent set of controls so you
+// don't hand-draw <input type="range">, segmented radios, steppers, etc.
+//
+// Usage (in an HTML file that loads React + Babel):
+//
+//   const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+//     "primaryColor": "#D97757",
+//     "fontSize": 16,
+//     "density": "regular",
+//     "dark": false
+//   }/*EDITMODE-END*/;
+//
+//   function App() {
+//     const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+//     return (
+//       <div style={{ fontSize: t.fontSize, color: t.primaryColor }}>
+//         Hello
+//         <TweaksPanel>
+//           <TweakSection label="Typography" />
+//           <TweakSlider label="Font size" value={t.fontSize} min={10} max={32} unit="px"
+//                        onChange={(v) => setTweak('fontSize', v)} />
+//           <TweakRadio  label="Density" value={t.density}
+//                        options={['compact', 'regular', 'comfy']}
+//                        onChange={(v) => setTweak('density', v)} />
+//           <TweakSection label="Theme" />
+//           <TweakColor  label="Primary" value={t.primaryColor}
+//                        onChange={(v) => setTweak('primaryColor', v)} />
+//           <TweakToggle label="Dark mode" value={t.dark}
+//                        onChange={(v) => setTweak('dark', v)} />
+//         </TweaksPanel>
+//       </div>
+//     );
+//   }
+//
+// ─────────────────────────────────────────────────────────────────────────────
+
+const __TWEAKS_STYLE = `
+  .twk-panel{position:fixed;right:16px;bottom:16px;z-index:2147483646;width:280px;
+    max-height:calc(100vh - 32px);display:flex;flex-direction:column;
+    background:rgba(250,249,247,.78);color:#29261b;
+    -webkit-backdrop-filter:blur(24px) saturate(160%);backdrop-filter:blur(24px) saturate(160%);
+    border:.5px solid rgba(255,255,255,.6);border-radius:14px;
+    box-shadow:0 1px 0 rgba(255,255,255,.5) inset,0 12px 40px rgba(0,0,0,.18);
+    font:11.5px/1.4 ui-sans-serif,system-ui,-apple-system,sans-serif;overflow:hidden}
+  .twk-hd{display:flex;align-items:center;justify-content:space-between;
+    padding:10px 8px 10px 14px;cursor:move;user-select:none}
+  .twk-hd b{font-size:12px;font-weight:600;letter-spacing:.01em}
+  .twk-x{appearance:none;border:0;background:transparent;color:rgba(41,38,27,.55);
+    width:22px;height:22px;border-radius:6px;cursor:default;font-size:13px;line-height:1}
+  .twk-x:hover{background:rgba(0,0,0,.06);color:#29261b}
+  .twk-body{padding:2px 14px 14px;display:flex;flex-direction:column;gap:10px;
+    overflow-y:auto;overflow-x:hidden;min-height:0;
+    scrollbar-width:thin;scrollbar-color:rgba(0,0,0,.15) transparent}
+  .twk-body::-webkit-scrollbar{width:8px}
+  .twk-body::-webkit-scrollbar-track{background:transparent;margin:2px}
+  .twk-body::-webkit-scrollbar-thumb{background:rgba(0,0,0,.15);border-radius:4px;
+    border:2px solid transparent;background-clip:content-box}
+  .twk-body::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,.25);
+    border:2px solid transparent;background-clip:content-box}
+  .twk-row{display:flex;flex-direction:column;gap:5px}
+  .twk-row-h{flex-direction:row;align-items:center;justify-content:space-between;gap:10px}
+  .twk-lbl{display:flex;justify-content:space-between;align-items:baseline;
+    color:rgba(41,38,27,.72)}
+  .twk-lbl>span:first-child{font-weight:500}
+  .twk-val{color:rgba(41,38,27,.5);font-variant-numeric:tabular-nums}
+
+  .twk-sect{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+    color:rgba(41,38,27,.45);padding:10px 0 0}
+  .twk-sect:first-child{padding-top:0}
+
+  .twk-field{appearance:none;width:100%;height:26px;padding:0 8px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:7px;
+    background:rgba(255,255,255,.6);color:inherit;font:inherit;outline:none}
+  .twk-field:focus{border-color:rgba(0,0,0,.25);background:rgba(255,255,255,.85)}
+  select.twk-field{padding-right:22px;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='rgba(0,0,0,.5)' d='M0 0h10L5 6z'/></svg>");
+    background-repeat:no-repeat;background-position:right 8px center}
+
+  .twk-slider{appearance:none;-webkit-appearance:none;width:100%;height:4px;margin:6px 0;
+    border-radius:999px;background:rgba(0,0,0,.12);outline:none}
+  .twk-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+    width:14px;height:14px;border-radius:50%;background:#fff;
+    border:.5px solid rgba(0,0,0,.12);box-shadow:0 1px 3px rgba(0,0,0,.2);cursor:default}
+  .twk-slider::-moz-range-thumb{width:14px;height:14px;border-radius:50%;
+    background:#fff;border:.5px solid rgba(0,0,0,.12);box-shadow:0 1px 3px rgba(0,0,0,.2);cursor:default}
+
+  .twk-seg{position:relative;display:flex;padding:2px;border-radius:8px;
+    background:rgba(0,0,0,.06);user-select:none}
+  .twk-seg-thumb{position:absolute;top:2px;bottom:2px;border-radius:6px;
+    background:rgba(255,255,255,.9);box-shadow:0 1px 2px rgba(0,0,0,.12);
+    transition:left .15s cubic-bezier(.3,.7,.4,1),width .15s}
+  .twk-seg.dragging .twk-seg-thumb{transition:none}
+  .twk-seg button{appearance:none;position:relative;z-index:1;flex:1;border:0;
+    background:transparent;color:inherit;font:inherit;font-weight:500;min-height:22px;
+    border-radius:6px;cursor:default;padding:4px 6px;line-height:1.2;
+    overflow-wrap:anywhere}
+
+  .twk-toggle{position:relative;width:32px;height:18px;border:0;border-radius:999px;
+    background:rgba(0,0,0,.15);transition:background .15s;cursor:default;padding:0}
+  .twk-toggle[data-on="1"]{background:#34c759}
+  .twk-toggle i{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;
+    background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
+  .twk-toggle[data-on="1"] i{transform:translateX(14px)}
+
+  .twk-num{display:flex;align-items:center;height:26px;padding:0 0 0 8px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:7px;background:rgba(255,255,255,.6)}
+  .twk-num-lbl{font-weight:500;color:rgba(41,38,27,.6);cursor:ew-resize;
+    user-select:none;padding-right:8px}
+  .twk-num input{flex:1;min-width:0;height:100%;border:0;background:transparent;
+    font:inherit;font-variant-numeric:tabular-nums;text-align:right;padding:0 8px 0 0;
+    outline:none;color:inherit;-moz-appearance:textfield}
+  .twk-num input::-webkit-inner-spin-button,.twk-num input::-webkit-outer-spin-button{
+    -webkit-appearance:none;margin:0}
+  .twk-num-unit{padding-right:8px;color:rgba(41,38,27,.45)}
+
+  .twk-btn{appearance:none;height:26px;padding:0 12px;border:0;border-radius:7px;
+    background:rgba(0,0,0,.78);color:#fff;font:inherit;font-weight:500;cursor:default}
+  .twk-btn:hover{background:rgba(0,0,0,.88)}
+  .twk-btn.secondary{background:rgba(0,0,0,.06);color:inherit}
+  .twk-btn.secondary:hover{background:rgba(0,0,0,.1)}
+
+  .twk-swatch{appearance:none;-webkit-appearance:none;width:56px;height:22px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:6px;padding:0;cursor:default;
+    background:transparent;flex-shrink:0}
+  .twk-swatch::-webkit-color-swatch-wrapper{padding:0}
+  .twk-swatch::-webkit-color-swatch{border:0;border-radius:5.5px}
+  .twk-swatch::-moz-color-swatch{border:0;border-radius:5.5px}
+`;
+
+// ── useTweaks ───────────────────────────────────────────────────────────────
+// Single source of truth for tweak values. setTweak persists via the host
+// (__edit_mode_set_keys → host rewrites the EDITMODE block on disk).
+function useTweaks(defaults) {
+  const [values, setValues] = React.useState(defaults);
+  // Accepts either setTweak('key', value) or setTweak({ key: value, ... }) so a
+  // useState-style call doesn't write a "[object Object]" key into the persisted
+  // JSON block.
+  const setTweak = React.useCallback((keyOrEdits, val) => {
+    const edits = typeof keyOrEdits === 'object' && keyOrEdits !== null
+      ? keyOrEdits : { [keyOrEdits]: val };
+    setValues((prev) => ({ ...prev, ...edits }));
+    window.parent.postMessage({ type: '__edit_mode_set_keys', edits }, '*');
+  }, []);
+  return [values, setTweak];
+}
+
+// ── TweaksPanel ─────────────────────────────────────────────────────────────
+// Floating shell. Registers the protocol listener BEFORE announcing
+// availability — if the announce ran first, the host's activate could land
+// before our handler exists and the toolbar toggle would silently no-op.
+// The close button posts __edit_mode_dismissed so the host's toolbar toggle
+// flips off in lockstep; the host echoes __deactivate_edit_mode back which
+// is what actually hides the panel.
+function TweaksPanel({ title = 'Tweaks', children }) {
+  const [open, setOpen] = React.useState(false);
+  const dragRef = React.useRef(null);
+  const offsetRef = React.useRef({ x: 16, y: 16 });
+  const PAD = 16;
+
+  const clampToViewport = React.useCallback(() => {
+    const panel = dragRef.current;
+    if (!panel) return;
+    const w = panel.offsetWidth, h = panel.offsetHeight;
+    const maxRight = Math.max(PAD, window.innerWidth - w - PAD);
+    const maxBottom = Math.max(PAD, window.innerHeight - h - PAD);
+    offsetRef.current = {
+      x: Math.min(maxRight, Math.max(PAD, offsetRef.current.x)),
+      y: Math.min(maxBottom, Math.max(PAD, offsetRef.current.y)),
+    };
+    panel.style.right = offsetRef.current.x + 'px';
+    panel.style.bottom = offsetRef.current.y + 'px';
+  }, []);
+
+  React.useEffect(() => {
+    if (!open) return;
+    clampToViewport();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', clampToViewport);
+      return () => window.removeEventListener('resize', clampToViewport);
+    }
+    const ro = new ResizeObserver(clampToViewport);
+    ro.observe(document.documentElement);
+    return () => ro.disconnect();
+  }, [open, clampToViewport]);
+
+  React.useEffect(() => {
+    const onMsg = (e) => {
+      const t = e?.data?.type;
+      if (t === '__activate_edit_mode') setOpen(true);
+      else if (t === '__deactivate_edit_mode') setOpen(false);
+    };
+    window.addEventListener('message', onMsg);
+    window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
+
+  const dismiss = () => {
+    setOpen(false);
+    window.parent.postMessage({ type: '__edit_mode_dismissed' }, '*');
+  };
+
+  const onDragStart = (e) => {
+    const panel = dragRef.current;
+    if (!panel) return;
+    const r = panel.getBoundingClientRect();
+    const sx = e.clientX, sy = e.clientY;
+    const startRight = window.innerWidth - r.right;
+    const startBottom = window.innerHeight - r.bottom;
+    const move = (ev) => {
+      offsetRef.current = {
+        x: startRight - (ev.clientX - sx),
+        y: startBottom - (ev.clientY - sy),
+      };
+      clampToViewport();
+    };
+    const up = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  };
+
+  if (!open) return null;
+  return (
+    <>
+      <style>{__TWEAKS_STYLE}</style>
+      <div ref={dragRef} className="twk-panel" data-noncommentable=""
+           style={{ right: offsetRef.current.x, bottom: offsetRef.current.y }}>
+        <div className="twk-hd" onMouseDown={onDragStart}>
+          <b>{title}</b>
+          <button className="twk-x" aria-label="Close tweaks"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={dismiss}>✕</button>
+        </div>
+        <div className="twk-body">{children}</div>
+      </div>
+    </>
+  );
+}
+
+// ── Layout helpers ──────────────────────────────────────────────────────────
+
+function TweakSection({ label, children }) {
+  return (
+    <>
+      <div className="twk-sect">{label}</div>
+      {children}
+    </>
+  );
+}
+
+function TweakRow({ label, value, children, inline = false }) {
+  return (
+    <div className={inline ? 'twk-row twk-row-h' : 'twk-row'}>
+      <div className="twk-lbl">
+        <span>{label}</span>
+        {value != null && <span className="twk-val">{value}</span>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// ── Controls ────────────────────────────────────────────────────────────────
+
+function TweakSlider({ label, value, min = 0, max = 100, step = 1, unit = '', onChange }) {
+  return (
+    <TweakRow label={label} value={`${value}${unit}`}>
+      <input type="range" className="twk-slider" min={min} max={max} step={step}
+             value={value} onChange={(e) => onChange(Number(e.target.value))} />
+    </TweakRow>
+  );
+}
+
+function TweakToggle({ label, value, onChange }) {
+  return (
+    <div className="twk-row twk-row-h">
+      <div className="twk-lbl"><span>{label}</span></div>
+      <button type="button" className="twk-toggle" data-on={value ? '1' : '0'}
+              role="switch" aria-checked={!!value}
+              onClick={() => onChange(!value)}><i /></button>
+    </div>
+  );
+}
+
+function TweakRadio({ label, value, options, onChange }) {
+  const trackRef = React.useRef(null);
+  const [dragging, setDragging] = React.useState(false);
+  const opts = options.map((o) => (typeof o === 'object' ? o : { value: o, label: o }));
+  const idx = Math.max(0, opts.findIndex((o) => o.value === value));
+  const n = opts.length;
+
+  // The active value is read by pointer-move handlers attached for the lifetime
+  // of a drag — ref it so a stale closure doesn't fire onChange for every move.
+  const valueRef = React.useRef(value);
+  valueRef.current = value;
+
+  const segAt = (clientX) => {
+    const r = trackRef.current.getBoundingClientRect();
+    const inner = r.width - 4;
+    const i = Math.floor(((clientX - r.left - 2) / inner) * n);
+    return opts[Math.max(0, Math.min(n - 1, i))].value;
+  };
+
+  const onPointerDown = (e) => {
+    setDragging(true);
+    const v0 = segAt(e.clientX);
+    if (v0 !== valueRef.current) onChange(v0);
+    const move = (ev) => {
+      if (!trackRef.current) return;
+      const v = segAt(ev.clientX);
+      if (v !== valueRef.current) onChange(v);
+    };
+    const up = () => {
+      setDragging(false);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
+  return (
+    <TweakRow label={label}>
+      <div ref={trackRef} role="radiogroup" onPointerDown={onPointerDown}
+           className={dragging ? 'twk-seg dragging' : 'twk-seg'}>
+        <div className="twk-seg-thumb"
+             style={{ left: `calc(2px + ${idx} * (100% - 4px) / ${n})`,
+                      width: `calc((100% - 4px) / ${n})` }} />
+        {opts.map((o) => (
+          <button key={o.value} type="button" role="radio" aria-checked={o.value === value}>
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </TweakRow>
+  );
+}
+
+function TweakSelect({ label, value, options, onChange }) {
+  return (
+    <TweakRow label={label}>
+      <select className="twk-field" value={value} onChange={(e) => onChange(e.target.value)}>
+        {options.map((o) => {
+          const v = typeof o === 'object' ? o.value : o;
+          const l = typeof o === 'object' ? o.label : o;
+          return <option key={v} value={v}>{l}</option>;
+        })}
+      </select>
+    </TweakRow>
+  );
+}
+
+function TweakText({ label, value, placeholder, onChange }) {
+  return (
+    <TweakRow label={label}>
+      <input className="twk-field" type="text" value={value} placeholder={placeholder}
+             onChange={(e) => onChange(e.target.value)} />
+    </TweakRow>
+  );
+}
+
+function TweakNumber({ label, value, min, max, step = 1, unit = '', onChange }) {
+  const clamp = (n) => {
+    if (min != null && n < min) return min;
+    if (max != null && n > max) return max;
+    return n;
+  };
+  const startRef = React.useRef({ x: 0, val: 0 });
+  const onScrubStart = (e) => {
+    e.preventDefault();
+    startRef.current = { x: e.clientX, val: value };
+    const decimals = (String(step).split('.')[1] || '').length;
+    const move = (ev) => {
+      const dx = ev.clientX - startRef.current.x;
+      const raw = startRef.current.val + dx * step;
+      const snapped = Math.round(raw / step) * step;
+      onChange(clamp(Number(snapped.toFixed(decimals))));
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  return (
+    <div className="twk-num">
+      <span className="twk-num-lbl" onPointerDown={onScrubStart}>{label}</span>
+      <input type="number" value={value} min={min} max={max} step={step}
+             onChange={(e) => onChange(clamp(Number(e.target.value)))} />
+      {unit && <span className="twk-num-unit">{unit}</span>}
+    </div>
+  );
+}
+
+function TweakColor({ label, value, onChange }) {
+  return (
+    <div className="twk-row twk-row-h">
+      <div className="twk-lbl"><span>{label}</span></div>
+      <input type="color" className="twk-swatch" value={value}
+             onChange={(e) => onChange(e.target.value)} />
+    </div>
+  );
+}
+
+function TweakButton({ label, onClick, secondary = false }) {
+  return (
+    <button type="button" className={secondary ? 'twk-btn secondary' : 'twk-btn'}
+            onClick={onClick}>{label}</button>
+  );
+}
+
+Object.assign(window, {
+  useTweaks, TweaksPanel, TweakSection, TweakRow,
+  TweakSlider, TweakToggle, TweakRadio, TweakSelect,
+  TweakText, TweakNumber, TweakColor, TweakButton,
+});
+
+
+/* ─── inlined from journal-fold.jsx ─── */
+/* ── JournalFoldView ──
+   마크다운 헤더(# / ## / ###) 기준으로 일지를 섹션으로 나눠 접기/펼치기.
+   메일 본문 등 긴 텍스트를 헤더 아래 묻어두고, 헤더만 펼쳐서 빠르게 스캔하기 위함. */
+
+function parseSections(text) {
+  const lines = (text || '').split('\n');
+  const sections = [];
+  let cur = { header: null, level: 0, body: [] };
+  for (const line of lines) {
+    const m = line.match(/^(#{1,6})\s+(.*)$/);
+    if (m) {
+      if (cur.header !== null || cur.body.length) sections.push({ ...cur, body: cur.body.join('\n') });
+      cur = { header: line, level: m[1].length, body: [] };
+    } else {
+      cur.body.push(line);
+    }
+  }
+  if (cur.header !== null || cur.body.length) sections.push({ ...cur, body: cur.body.join('\n') });
+  return sections;
+}
+
+function joinSections(sections) {
+  const out = [];
+  for (const s of sections) {
+    if (s.header !== null) out.push(s.header);
+    if (s.body.length > 0) out.push(...s.body.split('\n'));
+  }
+  return out.join('\n');
+}
+
+function JournalFoldView({ text, onChange, dateKey }) {
+  const sections = React.useMemo(() => parseSections(text), [text]);
+
+  /* 접힘 상태 — 날짜별로 localStorage 저장 */
+  const stateKey = `worklog.journal.fold.${dateKey}`;
+  const [folded, setFolded] = React.useState(() => {
+    try {
+      const arr = JSON.parse(localStorage.getItem(stateKey) || 'null');
+      if (Array.isArray(arr)) return new Set(arr);
+    } catch (e) {}
+    /* 기본: body가 6줄 이상이면 자동 접기 */
+    const def = new Set();
+    sections.forEach((s, i) => {
+      if (s.header !== null && (s.body.split('\n').length > 6 || s.body.length > 300)) def.add(i);
+    });
+    return def;
+  });
+  React.useEffect(() => {
+    localStorage.setItem(stateKey, JSON.stringify([...folded]));
+  }, [folded, stateKey]);
+
+  function toggle(idx) {
+    setFolded((prev) => {
+      const n = new Set(prev);
+      n.has(idx) ? n.delete(idx) : n.add(idx);
+      return n;
+    });
+  }
+
+  function updateBody(idx, newBody) {
+    const next = sections.map((s, i) => i === idx ? { ...s, body: newBody } : s);
+    onChange(joinSections(next));
+  }
+
+  function updateHeader(idx, newHeader) {
+    const next = sections.map((s, i) => i === idx ? { ...s, header: newHeader } : s);
+    onChange(joinSections(next));
+  }
+
+  function addHeaderAfter(idx) {
+    /* idx 섹션 뒤에 새 빈 헤더 섹션 삽입 */
+    const next = [...sections];
+    next.splice(idx + 1, 0, { header: '## 새 섹션', level: 2, body: '' });
+    onChange(joinSections(next));
+  }
+
+  function deleteSection(idx) {
+    if (!confirm('이 섹션을 삭제할까요?')) return;
+    const next = sections.filter((_, i) => i !== idx);
+    onChange(joinSections(next));
+  }
+
+  function expandAll() { setFolded(new Set()); }
+  function foldAll() {
+    const all = new Set();
+    sections.forEach((s, i) => { if (s.header !== null) all.add(i); });
+    setFolded(all);
+  }
+
+  const hasHeaders = sections.some((s) => s.header !== null);
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6, overflow: 'auto', paddingRight: 4 }}>
+      {/* 헤더 없을 때 안내 */}
+      {!hasHeaders &&
+        <div style={{ fontSize: 11, color: 'var(--text-3)', background: 'var(--surface-2)', borderRadius: 4, padding: '8px 10px', lineHeight: 1.6 }}>
+          💡 <strong>접을 섹션이 없어요.</strong> 본문에 <code style={{ fontFamily: 'var(--mono)', background: 'var(--surface)', padding: '0 4px', borderRadius: 2 }}>## 헤더</code> 또는 <code style={{ fontFamily: 'var(--mono)', background: 'var(--surface)', padding: '0 4px', borderRadius: 2 }}># 헤더</code>를 추가하면 그 줄 단위로 접기·펼치기가 가능해져요.
+        </div>
+      }
+
+      {/* 일괄 토글 */}
+      {hasHeaders &&
+        <div style={{ display: 'flex', gap: 6, fontSize: 11, color: 'var(--text-3)' }}>
+          <button className="btn btn-sm" onClick={foldAll}>▶ 모두 접기</button>
+          <button className="btn btn-sm" onClick={expandAll}>▼ 모두 펼치기</button>
+          <span style={{ alignSelf: 'center', marginLeft: 6, color: 'var(--text-4)' }}>
+            섹션 {sections.filter((s) => s.header !== null).length}개 · 접힘 {folded.size}개
+          </span>
+        </div>
+      }
+
+      {sections.map((s, i) => {
+        const isPreamble = s.header === null;
+        const isFolded = folded.has(i);
+        const bodyLines = s.body ? s.body.split('\n').length : 0;
+        const bodyChars = s.body.length;
+        const headerText = s.header ? s.header.replace(/^#{1,6}\s+/, '') : '(상단)';
+        const indentPx = isPreamble ? 0 : (s.level - 1) * 12;
+
+        return (
+          <div key={i} style={{ marginLeft: indentPx, background: 'var(--surface)' }}>
+            {/* 헤더 줄 — 항상 편집 가능, 좌측 chevron만 fold 토글 */}
+            {!isPreamble &&
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 4,
+                borderTop: i > 0 ? '1px solid var(--border)' : 'none',
+                background: isFolded ? 'var(--surface-2)' : 'transparent',
+                padding: '2px 0'
+              }}>
+                <button
+                  onClick={() => toggle(i)}
+                  title={isFolded ? '펼치기' : '접기'}
+                  style={{
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    color: 'var(--text-3)', fontSize: 11, width: 22, padding: '4px 0',
+                    flexShrink: 0, lineHeight: 1
+                  }}>{isFolded ? '▶' : '▼'}</button>
+                <input
+                  value={s.header}
+                  onChange={(e) => updateHeader(i, e.target.value)}
+                  spellCheck={false}
+                  style={{
+                    flex: 1, border: 'none', outline: 'none',
+                    padding: '4px 4px', fontFamily: 'var(--mono)', fontSize: 13,
+                    color: 'var(--text)', background: 'transparent', fontWeight: 600
+                  }}
+                  title="헤더 — 자유롭게 편집 가능" />
+                {isFolded && bodyLines > 0 &&
+                  <span style={{ fontSize: 10, color: 'var(--text-4)', background: 'var(--bg)', padding: '1px 8px', borderRadius: 99, marginRight: 4 }}>
+                    +{bodyLines}줄 / {bodyChars}자
+                  </span>
+                }
+                <button
+                  onClick={() => addHeaderAfter(i)}
+                  className="icon-btn"
+                  title="아래에 새 섹션"
+                  style={{ fontSize: 10, padding: '1px 6px', marginRight: 2 }}>+</button>
+                <button
+                  onClick={() => deleteSection(i)}
+                  className="icon-btn"
+                  title="섹션 삭제"
+                  style={{ fontSize: 10, padding: '1px 6px', color: 'var(--red)', borderColor: 'transparent', marginRight: 4 }}>✕</button>
+              </div>
+            }
+            {/* 본문 — 접혔을 때 숨김, 그 외에는 항상 편집 가능 */}
+            {!isFolded &&
+              <textarea
+                value={s.body}
+                onChange={(e) => updateBody(i, e.target.value)}
+                placeholder={isPreamble ? '(헤더 위 본문)' : '내용...'}
+                rows={Math.max(2, Math.min(24, bodyLines + 1))}
+                spellCheck={false}
+                style={{
+                  width: '100%', border: 'none', outline: 'none',
+                  padding: isPreamble ? '4px 4px 8px' : '2px 4px 8px 26px',
+                  fontFamily: 'var(--mono)', fontSize: 13,
+                  color: 'var(--text)', background: 'transparent', resize: 'vertical',
+                  lineHeight: 1.8, minHeight: isPreamble ? 40 : 48,
+                  display: 'block'
+                }} />
+            }
+          </div>
+        );
+      })}
+
+      {sections.length === 0 &&
+        <div style={{ fontSize: 12, color: 'var(--text-4)', padding: 12, textAlign: 'center' }}>(내용 없음)</div>
+      }
+    </div>
+  );
+}
+
+window.JournalFoldView = JournalFoldView;
+
+/* ─── end inlined jsx ─── */
+
+
 /* ─── API 헬퍼 ─── */
 /* 백엔드 미연결 감지 — Flask 서버 없이 HTML만 열면 /api/* 가 전부 실패함.
    첫 실패 시 플래그를 세워 이후 fetch 시도와 콘솔 스팸을 막고, 시드 데이터로
@@ -1117,6 +1743,12 @@ function Dashboard({ tasks, setTasks, projFilter, projects, selectedDate, setSel
   }, [journals, selectedDate]);
 
   const [saveStatus, setSaveStatus] = useState('✓ 자동저장됨');
+  const [foldMode, setFoldMode] = useState(() => {
+    /* 기본 접기 모드 ON — 헤더가 있으면 항상 접기 가능, /task 슬래시 명령은 평문 모드에서 */
+    try { const v = localStorage.getItem('worklog.journal.foldModeDefault'); return v === null ? true : v === 'true'; }
+    catch (e) { return true; }
+  });
+  React.useEffect(() => { try { localStorage.setItem('worklog.journal.foldModeDefault', String(foldMode)); } catch (e) {} }, [foldMode]);
   const saveTimer = useRef(null);
   const [activeTag, setActiveTag] = useState(null); // 클릭된 태그 (모든 날짜에서 해당 태그 줄 모아보기)
 
@@ -1611,7 +2243,10 @@ function Dashboard({ tasks, setTasks, projFilter, projects, selectedDate, setSel
             {selectedDate !== TODAY &&
           <button className="btn btn-sm" onClick={() => setSelectedDate(TODAY)} style={{ fontSize: 10 }}>오늘로</button>
           }
-            <button className="btn btn-primary btn-sm" style={{ marginLeft: 'auto' }} onClick={manualSave}>💾 저장</button>
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+              <button className="btn btn-sm" onClick={() => setFoldMode((v) => !v)} title="/task 슬래시 명령이 필요할 때만 평문으로 전환" style={{ fontSize: 10, opacity: foldMode ? 0.6 : 1 }}>{foldMode ? '⌨ 평문' : '🗂 접기로'}</button>
+              <button className="btn btn-primary btn-sm" onClick={manualSave}>💾 저장</button>
+            </div>
           </div>
           {selectedDate !== TODAY &&
         <div style={{ fontSize: 11, color: 'var(--text-3)', padding: '6px 10px', marginBottom: 6, borderRadius: 4, background: 'var(--surface-2)', borderLeft: '3px solid var(--accent)' }}>
@@ -1619,6 +2254,13 @@ function Dashboard({ tasks, setTasks, projFilter, projects, selectedDate, setSel
             </div>
         }
           <div style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column' }}>
+          {foldMode && window.JournalFoldView ?
+          <window.JournalFoldView text={journalText} dateKey={selectedDate} onChange={(v) => {
+            setJournalText(v);
+            setSaveStatus('편집 중...');
+            clearTimeout(saveTimer.current);
+            saveTimer.current = setTimeout(() => setSaveStatus('✓ 자동저장됨'), 2000);
+          }} /> :
           <textarea className="journal-textarea"
           ref={journalRef}
           value={journalText}
@@ -1626,8 +2268,8 @@ function Dashboard({ tasks, setTasks, projFilter, projects, selectedDate, setSel
           onKeyDown={onJournalKeyDown}
           onClick={onJournalClick}
           placeholder={`오늘 한 일, 회의 내용, 이슈 등을 자유롭게 기록하세요.\n\n팁:\n• /task 제목  →  Enter로 Task 즉시 생성 (오늘 일지면 자동 시작 ▶)\n  예: /task 보고서 초안 !A ~5/10 @보고서)\n• "- " 치고 엔터 → 다음 줄도 자동 리스트\n• "- [ ] " 치고 엔터 → 체크박스 리스트\n• ⌘/Ctrl + 클릭 → 체크박스 토글`} />
-          
-          {slashCmd &&
+          }
+          {!foldMode && slashCmd &&
           <div style={{ position: 'absolute', bottom: 10, left: 10, right: 10, background: 'var(--text)', color: 'var(--surface)', borderRadius: 8, padding: '10px 14px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 10, zIndex: 50, boxShadow: '0 8px 24px rgba(0,0,0,.18)' }}>
               <span style={{ fontSize: 16 }}>📌</span>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -1640,7 +2282,7 @@ function Dashboard({ tasks, setTasks, projFilter, projects, selectedDate, setSel
               </div>
             </div>
           }
-          {tagSuggest && tagSuggest.tags.length > 0 &&
+          {!foldMode && tagSuggest && tagSuggest.tags.length > 0 &&
           <div style={{ position: 'absolute', top: 0, left: 0, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, boxShadow: '0 8px 24px rgba(0,0,0,.12)', padding: 4, minWidth: 160, zIndex: 50 }}>
               <div style={{ fontSize: 9, color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: '.5px', padding: '4px 8px 2px' }}>태그 추천</div>
               {tagSuggest.tags.map((t) =>
@@ -2274,8 +2916,28 @@ function GanttView({ projFilter, onImport, tasks = [], setSelectedDate, setView,
   const [prioFilter, setPrioFilter] = useState('전체');
   const [zoom, setZoom] = useState(80); // 주당 px 너비
   const [selectedId, setSelectedId] = useState(null);
-  const [items, setItems] = useState(GANTT_DATA);
-  const [hiddenTaskIds, setHiddenTaskIds] = useState(() => new Set());
+  /* 시드 일정 — 제거 결과를 localStorage에 영속화 (탭 이동 시 초기화 방지) */
+  const [items, setItems] = useState(() => {
+    try {
+      const removed = new Set(JSON.parse(localStorage.getItem('worklog.gantt.removedSeedIds') || '[]'));
+      const overrides = JSON.parse(localStorage.getItem('worklog.gantt.seedOverrides') || '{}');
+      return GANTT_DATA.filter((g) => !removed.has(g.id)).map((g) => overrides[g.id] ? { ...g, ...overrides[g.id] } : g);
+    } catch (e) { return GANTT_DATA; }
+  });
+  /* task 기반 일정 — 숨김 처리도 영속화 */
+  const [hiddenTaskIds, setHiddenTaskIds] = useState(() => {
+    try {
+      const arr = JSON.parse(localStorage.getItem('worklog.gantt.hiddenTaskIds') || '[]');
+      return new Set(Array.isArray(arr) ? arr : []);
+    } catch (e) { return new Set(); }
+  });
+  /* task 기반 일정의 진행률 — items에 없으므로 별도 저장 */
+  const [taskProgress, setTaskProgress] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('worklog.gantt.taskProgress') || '{}'); }
+    catch (e) { return {}; }
+  });
+  useEffect(() => { localStorage.setItem('worklog.gantt.hiddenTaskIds', JSON.stringify([...hiddenTaskIds])); }, [hiddenTaskIds]);
+  useEffect(() => { localStorage.setItem('worklog.gantt.taskProgress', JSON.stringify(taskProgress)); }, [taskProgress]);
   const chartScrollRef = React.useRef(null);
   const didScrollToTodayRef = React.useRef(false);
 
@@ -2319,6 +2981,7 @@ function GanttView({ projFilter, onImport, tasks = [], setSelectedDate, setView,
   map((t) => {
     const startW = Math.max(0, ymdToWeekIdx(t.createdAt) ?? 0);
     const endW = Math.max(startW, ymdToWeekIdx(t.deadline) ?? startW);
+    const overrideProg = taskProgress[t.id];
     return {
       id: `task-${t.id}`,
       _taskId: t.id,
@@ -2327,7 +2990,7 @@ function GanttView({ projFilter, onImport, tasks = [], setSelectedDate, setView,
       startWeek: startW,
       endWeek: Math.min(endW, WEEKS.length - 1),
       priority: t.priority || 'B',
-      done: t.status === 'DOING' ? 50 : 0,
+      done: typeof overrideProg === 'number' ? overrideProg : (t.status === 'DOING' ? 50 : 0),
       _isTask: true,
       _journalDate: t.journalDate
     };
@@ -2387,7 +3050,23 @@ function GanttView({ projFilter, onImport, tasks = [], setSelectedDate, setView,
   }
 
   function updateProgress(id, val) {
-    setItems((prev) => prev.map((t) => t.id === id ? { ...t, done: Math.max(0, Math.min(100, val)) } : t));
+    const v = Math.max(0, Math.min(100, val));
+    /* task 기반 항목 — taskProgress에 저장 (id 형태: 'task-{taskId}') */
+    if (typeof id === 'string' && id.startsWith('task-')) {
+      const tid = parseInt(id.slice(5), 10);
+      setTaskProgress((prev) => ({ ...prev, [tid]: v }));
+      return;
+    }
+    /* 시드 항목 — items 업데이트 + localStorage override 저장 */
+    setItems((prev) => {
+      const next = prev.map((t) => t.id === id ? { ...t, done: v } : t);
+      try {
+        const ov = JSON.parse(localStorage.getItem('worklog.gantt.seedOverrides') || '{}');
+        ov[id] = { ...(ov[id] || {}), done: v };
+        localStorage.setItem('worklog.gantt.seedOverrides', JSON.stringify(ov));
+      } catch (e) {}
+      return next;
+    });
   }
 
   /* 액션: 일지에 기록 — 해당 task의 journalDate(또는 오늘)로 이동 + 체크리스트 항목 append */
@@ -2413,6 +3092,12 @@ function GanttView({ projFilter, onImport, tasks = [], setSelectedDate, setView,
       toast(`✕ "${item.name}" 일정에서 숨김 (할일은 그대로 유지)`, { duration: 3000 });
     } else {
       setItems((prev) => prev.filter((t) => t.id !== item.id));
+      /* 시드 항목 제거를 localStorage에 영속화 — 탭 이동/새로고침 후에도 유지 */
+      try {
+        const removed = new Set(JSON.parse(localStorage.getItem('worklog.gantt.removedSeedIds') || '[]'));
+        removed.add(item.id);
+        localStorage.setItem('worklog.gantt.removedSeedIds', JSON.stringify([...removed]));
+      } catch (e) {}
       toast(`✕ "${item.name}" 일정에서 제거됨`, { duration: 2500 });
     }
     setSelectedId(null);
@@ -3164,82 +3849,10 @@ function ShortcutsModal({ onClose }) {
 
 /* ─── Tweaks (mood / density / voice) ─── */
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
-  "mood": "paper",
+  "mood": "graphite",
   "density": "compact",
   "voice": "soft"
-} /*EDITMODE-END*/;
-
-/* ─── Tweaks stubs (원래 tweaks-panel.jsx 에 있던 컴포넌트들 — 핸드오프 누락분 인라인 대체) ─── */
-function useTweaks(defaults) {
-  const KEY = 'worklog.tweaks';
-  const [values, setValues] = React.useState(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem(KEY) || 'null');
-      return { ...defaults, ...(saved || {}) };
-    } catch (_) { return defaults; }
-  });
-  const setTweak = React.useCallback((key, val) => {
-    setValues((prev) => {
-      const next = { ...prev, [key]: val };
-      try { localStorage.setItem(KEY, JSON.stringify(next)); } catch (_) {}
-      return next;
-    });
-  }, []);
-  return [values, setTweak];
-}
-
-function TweaksPanel({ title, children }) {
-  const [open, setOpen] = React.useState(false);
-  return (
-    <div style={{
-      position: 'fixed', bottom: 16, right: 16, zIndex: 9999,
-      background: 'rgba(245,241,236,0.96)', border: '1px solid rgba(0,0,0,0.1)',
-      borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
-      backdropFilter: 'blur(8px)', font: '500 11px/1.4 system-ui, sans-serif',
-      color: '#29261b', maxWidth: 240
-    }}>
-      <button onClick={() => setOpen((o) => !o)} style={{
-        width: '100%', padding: '8px 12px', background: 'transparent',
-        border: 0, borderBottom: open ? '1px solid rgba(0,0,0,0.08)' : 0,
-        cursor: 'pointer', textAlign: 'left', font: 'inherit',
-        color: 'inherit', display: 'flex', justifyContent: 'space-between'
-      }}>
-        <span>⚙ {title}</span>
-        <span style={{ opacity: 0.5 }}>{open ? '▾' : '▸'}</span>
-      </button>
-      {open && <div style={{ padding: '8px 12px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>{children}</div>}
-    </div>);
-}
-
-function TweakSection({ label }) {
-  return (
-    <div style={{
-      fontSize: 9, fontWeight: 600, letterSpacing: 0.6,
-      textTransform: 'uppercase', opacity: 0.5, marginTop: 4
-    }}>{label}</div>);
-}
-
-function TweakRadio({ label, value, options, onChange }) {
-  return (
-    <div>
-      <div style={{ fontSize: 10, opacity: 0.7, marginBottom: 4 }}>{label}</div>
-      <div style={{ display: 'flex', gap: 4 }}>
-        {options.map((opt) => (
-          <button key={opt.value}
-            onClick={() => onChange(opt.value)}
-            style={{
-              flex: 1, padding: '4px 6px', fontSize: 10,
-              background: value === opt.value ? '#29261b' : 'transparent',
-              color: value === opt.value ? '#f5f1ec' : '#29261b',
-              border: '1px solid rgba(0,0,0,0.15)', borderRadius: 4,
-              cursor: 'pointer', font: 'inherit'
-            }}>
-            {opt.label}
-          </button>
-        ))}
-      </div>
-    </div>);
-}
+}/*EDITMODE-END*/;
 
 function TweaksUI({ values, setTweak }) {
   React.useEffect(() => {
