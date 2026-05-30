@@ -3405,85 +3405,270 @@ function GanttView({ projFilter, onImport, tasks = [], setSelectedDate, setView,
 
 /* ─── Weekly View ─── */
 function WeeklyView({ tasks, dataVersion }) {
-  /* 오늘이 속한 주의 월~금 (ISO 주, 월요일 시작) */
-  const { weekStart, weekEnd, WEEK_DATES } = (() => {
-    const t = new Date();t.setHours(0, 0, 0, 0);
-    const dow = (t.getDay() + 6) % 7; // 월=0 ... 일=6
-    const mon = new Date(t);mon.setDate(t.getDate() - dow);
-    const sun = new Date(mon);sun.setDate(mon.getDate() + 6);
-    const weekDates = [];
-    for (let i = 0; i < 5; i++) {
-      const d = new Date(mon);d.setDate(mon.getDate() + i);
-      weekDates.push(localYMD(d));
-    }
-    return { weekStart: localYMD(mon), weekEnd: localYMD(sun), WEEK_DATES: weekDates };
-  })();
+  /* ── 주 오프셋 (0=이번 주, -1=지난 주, …) ── */
+  const [weekOffset, setWeekOffset] = useState(0);
   const DAYS_KO = ['월', '화', '수', '목', '금', '토', '일'];
 
-  /* 백엔드 주간 통계 */
-  const [stats, setStats] = useState(null);
+  /* ── 주 범위 계산 ── */
+  const { weekStart, weekEnd, weekLabel, WEEK_DATES, nextWeekStart, nextWeekEnd } = React.useMemo(() => {
+    const t = new Date(); t.setHours(0, 0, 0, 0);
+    const dow = (t.getDay() + 6) % 7;
+    const mon = new Date(t); mon.setDate(t.getDate() - dow + weekOffset * 7);
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+    const nwMon = new Date(sun); nwMon.setDate(sun.getDate() + 1);
+    const nwSun = new Date(nwMon); nwSun.setDate(nwMon.getDate() + 6);
+    const weekDates = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(mon); d.setDate(mon.getDate() + i);
+      weekDates.push(localYMD(d));
+    }
+    const fmt = (d) => `${d.getMonth() + 1}/${d.getDate()}`;
+    const label = weekOffset === 0 ? `이번 주 (${fmt(mon)}–${fmt(sun)})` :
+                  weekOffset === -1 ? `지난 주 (${fmt(mon)}–${fmt(sun)})` :
+                  `${fmt(mon)}–${fmt(sun)}`;
+    return {
+      weekStart: localYMD(mon), weekEnd: localYMD(sun),
+      weekLabel: label, WEEK_DATES: weekDates,
+      nextWeekStart: localYMD(nwMon), nextWeekEnd: localYMD(nwSun),
+    };
+  }, [weekOffset]);
+
+  /* ── 일지 fetch ── */
+  const [journals, setJournals] = useState([]);
   useEffect(() => {
     let cancelled = false;
-    GET(`/api/stats/weekly?start=${weekStart}&end=${weekEnd}`).
-    then((s) => {if (!cancelled) setStats(s);}).
-    catch((_) => {});
-    return () => {cancelled = true;};
-  }, [dataVersion, weekStart, weekEnd]);
+    GET(`/api/journals/range?start=${weekStart}&end=${weekEnd}`)
+      .then((data) => { if (!cancelled) setJournals(Array.isArray(data) ? data : []); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [weekStart, weekEnd, dataVersion]);
 
-  /* 이번 주 통계 — 백엔드 우선, 폴백은 클라이언트 계산 */
-  const weekTasks = tasks.filter((t) => t.createdAt >= weekStart && t.createdAt <= weekEnd);
-  const total = (stats && stats.total) ?? (weekTasks.length || 5);
-  const done = (stats && stats.done) ?? (tasks.filter((t) => t.status === 'DONE' && t.updatedAt >= weekStart).length || 3);
-  const active = (stats && stats.active) ?? tasks.filter((t) => ['TODO', 'DOING'].includes(t.status)).length;
-  const pct = total ? Math.round(done / total * 100) : 0;
+  /* ── 클라이언트 계산 ── */
+  const isOpen    = (t) => ['TODO', 'DOING'].includes(t.status);
+  const isDone    = (t) => t.status === 'DONE';
+  const inWeek    = (dateStr) => dateStr && dateStr >= weekStart && dateStr <= weekEnd;
+
+  const doneThisWeek  = tasks.filter((t) => isDone(t) && inWeek(t.updatedAt));
+  const openItems     = tasks.filter((t) => isOpen(t));
+  const openDecisions = tasks.filter((t) => t.type === 'DECISION' && isOpen(t));
+  const openIssues    = tasks.filter((t) => t.type === 'ISSUE'    && isOpen(t));
+
+  const decisionsThisWeek = tasks.filter((t) => t.type === 'DECISION' && inWeek(t.createdAt));
+  const nextWeekItems     = tasks.filter((t) => t.deadline && t.deadline >= nextWeekStart && t.deadline <= nextWeekEnd && t.status !== 'DONE' && t.status !== 'CANCELLED');
+
+  const journalDays = journals.filter((j) => j.content && j.content.trim()).length;
+
+  /* type별 현황 */
+  const TYPE_KEYS = ['TASK', 'WAITING', 'ISSUE', 'FOLLOWUP', 'DECISION'];
+  const typeStats = TYPE_KEYS.map((k) => {
+    const all  = tasks.filter((t) => t.type === k);
+    const open = all.filter(isOpen).length;
+    const done = all.filter(isDone).length;
+    return { key: k, label: TYPE_META[k].label, icon: TYPE_META[k].icon, open, done };
+  }).filter((s) => s.open + s.done > 0);
+
+  /* 프로젝트별 현황 */
+  const projSet = [...new Set(tasks.map((t) => t.project || '미분류'))];
+  const projStats = projSet.map((p) => {
+    const pt = tasks.filter((t) => (t.project || '미분류') === p);
+    return { name: p, open: pt.filter(isOpen).length, done: pt.filter(isDone).length };
+  }).filter((s) => s.open + s.done > 0).sort((a, b) => b.open - a.open);
 
   /* 히트맵 */
-  function heatLevel(c) {if (!c) return 0;if (c === 1) return 1;if (c <= 3) return 2;if (c <= 6) return 3;return 4;}
-  const firstDate = new Date(HEATMAP_DATA[0].date + 'T00:00:00');
-  const startDow = (firstDate.getDay() + 6) % 7; // 월=0
-  const padded = [...Array(startDow).fill(null), ...HEATMAP_DATA];
+  function heatLevel(c) { return !c ? 0 : c === 1 ? 1 : c <= 3 ? 2 : c <= 6 ? 3 : 4; }
+  const firstDate  = new Date(HEATMAP_DATA[0].date + 'T00:00:00');
+  const startDow   = (firstDate.getDay() + 6) % 7;
+  const padded     = [...Array(startDow).fill(null), ...HEATMAP_DATA];
   while (padded.length % 7 !== 0) padded.push(null);
-  const numWeeks = padded.length / 7;
+  const numWeeks   = padded.length / 7;
+  const [tooltip, setTooltip] = useState(null);
 
-  const [tooltip, setTooltip] = React.useState(null);
+  /* 일지 펼침 */
+  const [expanded, setExpanded] = useState({});
+  const toggleJ = (d) => setExpanded((p) => ({ ...p, [d]: !p[d] }));
 
-  /* 일지 내용 펼침 상태 */
-  const [expanded, setExpanded] = React.useState({});
-  const toggle = (d) => setExpanded((p) => ({ ...p, [d]: !p[d] }));
-
-  const Card = ({ children, style }) =>
-  <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: '16px 20px', boxShadow: 'var(--shadow)', ...style }}>{children}</div>;
-
+  /* 공통 카드 */
+  const Card = ({ children, style }) => (
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: '16px 20px', boxShadow: 'var(--shadow)', ...style }}>
+      {children}
+    </div>
+  );
+  const SectionTitle = ({ children }) => (
+    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '.04em', textTransform: 'uppercase', marginBottom: 12 }}>{children}</div>
+  );
+  const EmptyMsg = ({ children }) => (
+    <div style={{ fontSize: 12, color: 'var(--text-4)', padding: '10px 0' }}>{children}</div>
+  );
 
   return (
     <div style={{ padding: 24, overflow: 'auto', height: '100%', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-      {/* 통계 카드 3개 */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
-        {[
-        { n: total, l: '이번 주 등록', c: 'var(--text)' },
-        { n: done, l: '완료', c: 'var(--green)' },
-        { n: `${pct}%`, l: '완료율', c: 'var(--accent)' }].
-        map((s, i) =>
-        <Card key={i} style={{ textAlign: 'center', padding: '18px 16px' }}>
-            <div style={{ fontSize: 32, fontWeight: 700, color: s.c }}>{s.n}</div>
-            <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>{s.l}</div>
-          </Card>
+      {/* 주 네비게이션 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <button onClick={() => setWeekOffset((o) => o - 1)} className="icon-btn" style={{ padding: '4px 10px' }}>‹</button>
+        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)' }}>{weekLabel}</span>
+        <button onClick={() => setWeekOffset((o) => o + 1)} className="icon-btn" style={{ padding: '4px 10px' }} disabled={weekOffset >= 0}>{weekOffset >= 0 ? '–' : '›'}</button>
+        {weekOffset !== 0 && (
+          <button onClick={() => setWeekOffset(0)} className="filter-chip" style={{ marginLeft: 4, fontSize: 11 }}>이번 주로</button>
         )}
       </div>
 
-      {/* 완료율 바 */}
+      {/* 요약 카드 4개 */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
+        {[
+          { n: doneThisWeek.length,  l: '완료',      c: 'var(--green)',       bg: 'var(--green-light)' },
+          { n: openItems.length,     l: '열린 항목',  c: 'var(--accent)',      bg: 'var(--accent-light)' },
+          { n: openDecisions.length, l: '결정',       c: 'var(--green)',       bg: 'var(--green-light)' },
+          { n: openIssues.length,    l: '이슈',       c: 'var(--red)',         bg: 'var(--red-light)' },
+        ].map((s, i) => (
+          <Card key={i} style={{ textAlign: 'center', padding: '14px 10px', background: s.bg }}>
+            <div style={{ fontSize: 28, fontWeight: 700, color: s.c }}>{s.n}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>{s.l}</div>
+          </Card>
+        ))}
+      </div>
+
+      {/* 완료율 + 일지 작성일 */}
       <Card>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <span style={{ fontSize: 13, fontWeight: 600 }}>이번 주 완료율</span>
-          <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 700 }}>{pct}%</span>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-3)' }}>📝 일지 {journalDays}일</span>
+            <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 700 }}>
+              {doneThisWeek.length + openItems.length > 0 ? Math.round(doneThisWeek.length / (doneThisWeek.length + openItems.length) * 100) : 0}%
+            </span>
+          </div>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-          <span style={{ fontSize: 11, color: 'var(--text-3)' }}>4/21 ~ 4/27</span>
-          <span style={{ fontSize: 11, color: 'var(--text-3)' }}>진행/대기 {active}개</span>
+        <div className="progress-bar" style={{ height: 6 }}>
+          <div className="progress-fill" style={{
+            width: `${doneThisWeek.length + openItems.length > 0 ? Math.round(doneThisWeek.length / (doneThisWeek.length + openItems.length) * 100) : 0}%`,
+            background: 'var(--green)',
+          }} />
         </div>
-        <div className="progress-bar" style={{ height: 8 }}>
-          <div className="progress-fill" style={{ width: `${pct}%`, background: 'var(--green)' }} />
+      </Card>
+
+      {/* 타입별 + 프로젝트별 (2열) */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        {/* 타입별 현황 */}
+        <Card>
+          <SectionTitle>타입별 현황</SectionTitle>
+          {typeStats.length === 0 ? <EmptyMsg>데이터 없음</EmptyMsg> : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {typeStats.map((s) => (
+                <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 13, width: 18 }}>{s.icon || '📌'}</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-2)', flex: 1 }}>{s.label}</span>
+                  <span style={{ fontSize: 11, color: 'var(--green)', fontWeight: 600 }}>{s.done}완료</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 4 }}>{s.open}진행</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+
+        {/* 프로젝트별 현황 */}
+        <Card>
+          <SectionTitle>프로젝트별 현황</SectionTitle>
+          {projStats.length === 0 ? <EmptyMsg>데이터 없음</EmptyMsg> : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {projStats.slice(0, 6).map((s) => {
+                const total = s.done + s.open;
+                const pct   = total ? Math.round(s.done / total * 100) : 0;
+                return (
+                  <div key={s.name}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                      <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{s.name}</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{s.done}/{total} · {pct}%</span>
+                    </div>
+                    <div className="progress-bar" style={{ height: 4 }}>
+                      <div className="progress-fill" style={{ width: `${pct}%`, background: PROJ_COLORS[s.name] || 'var(--accent)' }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* 이번 주 Decision */}
+      <Card>
+        <SectionTitle>✅ 이번 주 생성된 결정</SectionTitle>
+        {decisionsThisWeek.length === 0 ? <EmptyMsg>이번 주 결정된 항목 없음</EmptyMsg> : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {decisionsThisWeek.map((t) => (
+              <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 6, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+                <span className={`badge badge-${t.status === 'DONE' ? 'green' : 'blue'}`} style={{ fontSize: 10 }}>{t.status}</span>
+                <span style={{ fontSize: 13, flex: 1 }}>{t.title}</span>
+                {t.project && <span style={{ fontSize: 11, color: 'var(--text-3)' }}>📁 {t.project}</span>}
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {/* 열린 이슈 */}
+      <Card>
+        <SectionTitle>⚠ 열린 이슈 ({openIssues.length})</SectionTitle>
+        {openIssues.length === 0 ? <EmptyMsg>열린 이슈 없음 👍</EmptyMsg> : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {openIssues.slice(0, 8).map((t) => (
+              <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 6, background: 'var(--red-light)', border: '1px solid var(--border)' }}>
+                <span className={`badge badge-prio-${t.priority?.toLowerCase()}`} style={{ fontSize: 10 }}>{t.priority}</span>
+                <span style={{ fontSize: 13, flex: 1 }}>{t.title}</span>
+                {t.deadline && <span style={{ fontSize: 11, color: 'var(--red)', fontWeight: 600 }}>~{t.deadline}</span>}
+                {t.project && <span style={{ fontSize: 11, color: 'var(--text-3)' }}>📁 {t.project}</span>}
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {/* 다음 주 예정 */}
+      <Card>
+        <SectionTitle>📅 다음 주 마감 예정 ({nextWeekItems.length})</SectionTitle>
+        {nextWeekItems.length === 0 ? <EmptyMsg>다음 주 마감 예정 없음</EmptyMsg> : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {nextWeekItems.sort((a, b) => (a.deadline || '').localeCompare(b.deadline || '')).map((t) => (
+              <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 6, background: 'var(--amber-light)', border: '1px solid var(--border)' }}>
+                <span style={{ fontSize: 11, color: 'var(--amber)', fontWeight: 700 }}>{t.deadline}</span>
+                <span style={{ fontSize: 13, flex: 1 }}>{t.title}</span>
+                {TYPE_META[t.type]?.icon && <span style={{ fontSize: 12 }}>{TYPE_META[t.type].icon}</span>}
+                {t.project && <span style={{ fontSize: 11, color: 'var(--text-3)' }}>📁 {t.project}</span>}
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {/* 이번 주 일지 */}
+      <Card>
+        <SectionTitle>📝 이번 주 일지</SectionTitle>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {WEEK_DATES.map((date) => {
+            const j   = journals.find((j) => j.date === date);
+            const dow = DAYS_KO[(new Date(date + 'T00:00:00').getDay() + 6) % 7];
+            const isExp = expanded[date];
+            return (
+              <div key={date} style={{ borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border)' }}>
+                <div onClick={() => toggleJ(date)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer', background: isExp ? 'var(--surface-2)' : 'transparent' }}>
+                  <span style={{ fontSize: 10, color: 'var(--text-4)', width: 14 }}>{dow}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)' }}>{date}</span>
+                  {j && j.content
+                    ? <span style={{ fontSize: 10, background: 'var(--accent-light)', color: 'var(--accent-text)', borderRadius: 99, padding: '1px 7px', marginLeft: 'auto' }}>기록 있음</span>
+                    : <span style={{ fontSize: 10, color: 'var(--text-4)', marginLeft: 'auto' }}>없음</span>}
+                  <span style={{ fontSize: 10, color: 'var(--text-4)' }}>{isExp ? '▲' : '▼'}</span>
+                </div>
+                {isExp && (
+                  <div style={{ padding: '10px 14px 12px', borderTop: '1px solid var(--border)', background: 'var(--surface)' }}>
+                    {j && j.content
+                      ? <pre style={{ fontFamily: 'var(--mono)', fontSize: 12, whiteSpace: 'pre-wrap', color: 'var(--text-2)', lineHeight: 1.8, margin: 0 }}>{j.content}</pre>
+                      : <span style={{ fontSize: 12, color: 'var(--text-4)' }}>이 날 일지가 비어있어요.</span>}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </Card>
 
@@ -3493,75 +3678,32 @@ function WeeklyView({ tasks, dataVersion }) {
           <span style={{ fontSize: 13, fontWeight: 600 }}>🌿 최근 35일 완료 현황</span>
           <div style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 11, color: 'var(--text-3)' }}>
             <span>적음</span>
-            {[0, 1, 2, 3, 4].map((l) =>
-            <div key={l} className={`heat-cell heat-${l}`} style={{ width: 12, height: 12, borderRadius: 3 }} />
-            )}
+            {[0, 1, 2, 3, 4].map((l) => <div key={l} className={`heat-cell heat-${l}`} style={{ width: 12, height: 12, borderRadius: 3 }} />)}
             <span>많음</span>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
-          {/* 요일 레이블 */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3, paddingTop: 2 }}>
-            {DAYS_KO.map((d) =>
-            <div key={d} style={{ width: 18, height: 14, fontSize: 10, color: 'var(--text-3)', lineHeight: '14px', textAlign: 'right' }}>{d}</div>
-            )}
+            {DAYS_KO.map((d) => <div key={d} style={{ width: 18, height: 14, fontSize: 10, color: 'var(--text-3)', lineHeight: '14px', textAlign: 'right' }}>{d}</div>)}
           </div>
-          {/* 그리드 */}
           <div style={{ display: 'grid', gridTemplateRows: 'repeat(7,14px)', gridTemplateColumns: `repeat(${numWeeks},14px)`, gridAutoFlow: 'column', gap: 3 }}>
-            {padded.map((d, i) => d ?
-            <div key={i}
-            className={`heat-cell heat-${heatLevel(d.count)}`}
-            style={{ width: 14, height: 14, borderRadius: 3, cursor: 'default' }}
-            onMouseEnter={(e) => setTooltip({ text: `${d.date}  완료 ${d.count}개`, x: e.clientX, y: e.clientY })}
-            onMouseLeave={() => setTooltip(null)} /> :
-
-
-            <div key={i} style={{ width: 14, height: 14, visibility: 'hidden' }} />
+            {padded.map((d, i) => d
+              ? <div key={i} className={`heat-cell heat-${heatLevel(d.count)}`} style={{ width: 14, height: 14, borderRadius: 3, cursor: 'default' }}
+                  onMouseEnter={(e) => setTooltip({ text: `${d.date}  완료 ${d.count}개`, x: e.clientX, y: e.clientY })}
+                  onMouseLeave={() => setTooltip(null)} />
+              : <div key={i} style={{ width: 14, height: 14, visibility: 'hidden' }} />
             )}
           </div>
         </div>
-        {tooltip &&
-        <div style={{ position: 'fixed', left: tooltip.x + 12, top: tooltip.y - 28, background: 'var(--text)', color: 'var(--surface)', padding: '4px 10px', borderRadius: 6, fontSize: 12, pointerEvents: 'none', zIndex: 200, boxShadow: 'var(--shadow-md)' }}>
+        {tooltip && (
+          <div style={{ position: 'fixed', left: tooltip.x + 12, top: tooltip.y - 28, background: 'var(--text)', color: 'var(--surface)', padding: '4px 10px', borderRadius: 6, fontSize: 12, pointerEvents: 'none', zIndex: 200, boxShadow: 'var(--shadow-md)' }}>
             {tooltip.text}
           </div>
-        }
+        )}
       </Card>
 
-      {/* 날짜별 일지 */}
-      <Card>
-        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 14 }}>📝 이번 주 일지</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-          {WEEK_DATES.map((date) => {
-            const j = WEEKLY_JOURNALS.find((j) => j.date === date);
-            const dow = DAYS_KO[new Date(date + 'T00:00:00').getDay() - 1] || '일';
-            const isOpen = expanded[date];
-            return (
-              <div key={date} style={{ borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border)', marginBottom: 6 }}>
-                <div
-                  onClick={() => toggle(date)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', cursor: 'pointer', background: isOpen ? 'var(--surface-2)' : 'transparent' }}>
-                  
-                  <span style={{ fontSize: 11, color: 'var(--text-4)', width: 16 }}>{dow}</span>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)' }}>{date}</span>
-                  {j ? <span style={{ fontSize: 11, background: 'var(--accent-light)', color: 'var(--accent-text)', borderRadius: 99, padding: '1px 8px', marginLeft: 'auto' }}>기록 있음</span> :
-                  <span style={{ fontSize: 11, color: 'var(--text-4)', marginLeft: 'auto' }}>기록 없음</span>}
-                  <span style={{ fontSize: 10, color: 'var(--text-4)', marginLeft: 4 }}>{isOpen ? '▲' : '▼'}</span>
-                </div>
-                {isOpen &&
-                <div style={{ padding: '10px 14px 12px', borderTop: '1px solid var(--border)', background: 'var(--surface)' }}>
-                    {j ?
-                  <pre style={{ fontFamily: 'var(--mono)', fontSize: 12, whiteSpace: 'pre-wrap', color: 'var(--text-2)', lineHeight: 1.8, margin: 0 }}>{j.content}</pre> :
-                  <span style={{ fontSize: 12, color: 'var(--text-4)' }}>이 날 일지가 비어있어요.</span>
-                  }
-                  </div>
-                }
-              </div>);
-
-          })}
-        </div>
-      </Card>
-    </div>);
-
+    </div>
+  );
 }
 
 /* ─── Board View ─── */
@@ -4537,13 +4679,7 @@ function ReviewView({ tasks, setTasks, dataVersion, refreshTasks, onGoToday }) {
       <div style={{ flex: 1, overflow: 'hidden' }}>
         {tab === 'daily'   && <BriefingView tasks={tasks} dataVersion={dataVersion} />}
         {tab === 'cleanup' && <TaskCleanupView tasks={tasks} setTasks={setTasks} onResume={onGoToday} refreshTasks={refreshTasks} />}
-        {tab === 'weekly'  && (
-          <div style={{ padding: 32, color: 'var(--text-3)', textAlign: 'center', marginTop: 60 }}>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>📝</div>
-            <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-2)', marginBottom: 8 }}>Weekly Review</div>
-            <div style={{ fontSize: 13 }}>이번 주 일지 + Task 자동 요약 예정 (구현 중)</div>
-          </div>
-        )}
+        {tab === 'weekly'  && <WeeklyView tasks={tasks} dataVersion={dataVersion} />}
       </div>
     </div>
   );
