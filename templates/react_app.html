@@ -1630,7 +1630,7 @@ function MiniCalendar({ onSelectDate, selectedDate, journalDates }) {
 }
 
 /* ─── Sidebar ─── */
-function Sidebar({ view, setView, dark, setDark, projFilter, setProjFilter, projects, onManageProjects, onSelectDate, selectedDate, journalDates }) {
+function Sidebar({ view, setView, dark, setDark, projFilter, setProjFilter, projects, onManageProjects, onSelectDate, selectedDate, journalDates, setShowSearch }) {
   return (
     <aside className="sidebar">
       <div className="sidebar-logo">
@@ -1644,26 +1644,27 @@ function Sidebar({ view, setView, dark, setDark, projFilter, setProjFilter, proj
 
       <div className="sidebar-section">
         <div className="sidebar-section-label">보기</div>
-        <div className={`nav-item${view === 'dashboard' ? ' active' : ''}`} onClick={() => setView('dashboard')}>
-          <span className="icon">🏠</span> 대시보드
-        </div>
-        <div className={`nav-item${view === 'board' ? ' active' : ''}`} onClick={() => setView('board')}>
-          <span className="icon">📋</span> Board
+        <div className={`nav-item${view === 'today' ? ' active' : ''}`} onClick={() => setView('today')}>
+          <span className="icon">🏠</span> Today
         </div>
         <div className={`nav-item${view === 'inbox' ? ' active' : ''}`} onClick={() => setView('inbox')}>
           <span className="icon">📥</span> Inbox
         </div>
-        <div className={`nav-item${view === 'briefing' ? ' active' : ''}`} onClick={() => setView('briefing')}>
-          <span className="icon">📢</span> 브리핑
+        <div className={`nav-item${view === 'board' ? ' active' : ''}`} onClick={() => setView('board')}>
+          <span className="icon">📋</span> Board
+        </div>
+        <div className={`nav-item${view === 'review' ? ' active' : ''}`} onClick={() => setView('review')}>
+          <span className="icon">🔍</span> Review
+        </div>
+        <div className={`nav-item${view === 'search' ? ' active' : ''}`} onClick={() => { setShowSearch(true); }}>
+          <span className="icon">🔎</span> Search
         </div>
         {/* Gantt — Advanced View. 기본 메뉴에서 숨김. Board > Timeline 탭에서 접근 예정.
             활성화하려면 아래 주석을 해제:
             <div className={`nav-item${view === 'gantt' ? ' active' : ''}`} onClick={() => setView('gantt')}>
               <span className="icon">📅</span> 전체 일정
-            </div> */}
-        <div className={`nav-item${view === 'cleanup' ? ' active' : ''}`} onClick={() => setView('cleanup')}>
-          <span className="icon">🧹</span> Task 정리
-        </div>
+            </div>
+            Tweaks Panel 도 Advanced 에서 접근 예정. */}
       </div>
 
       <div className="sidebar-section" style={{ flex: 1 }}>
@@ -3176,7 +3177,7 @@ function GanttView({ projFilter, onImport, tasks = [], setSelectedDate, setView,
   function logToJournal(item) {
     const date = item._journalDate || TODAY;
     if (setSelectedDate) setSelectedDate(date);
-    if (setView) setView('dashboard');
+    if (setView) setView('today');
     // 대시보드 mount + 해당 날짜 일지 로딩이 끝날 시간 확보 후 이벤트 발행
     setTimeout(() => {
       const line = `- [ ] ${item.name} 📌${item.project ? ` @${item.project}` : ''}`;
@@ -4509,6 +4510,45 @@ function TweaksUI({ values, setTweak }) {
 
 }
 
+/* ─── Review View ─── */
+/* Daily(브리핑) + Cleanup(Task 정리) 탭 래퍼.
+   Weekly Review는 TODO — placeholder 제공. */
+function ReviewView({ tasks, setTasks, dataVersion, refreshTasks, onGoToday }) {
+  const [tab, setTab] = useState('daily');
+  const tabStyle = (t) => ({
+    padding: '5px 14px',
+    fontSize: 13,
+    fontWeight: tab === t ? 600 : 400,
+    color: tab === t ? 'var(--accent-text)' : 'var(--text-3)',
+    background: tab === t ? 'var(--accent-light)' : 'transparent',
+    border: 'none',
+    borderRadius: 'var(--radius-sm)',
+    cursor: 'pointer',
+  });
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {/* 탭 바 */}
+      <div style={{ display: 'flex', gap: 4, padding: '10px 18px 0', borderBottom: '1px solid var(--border)', background: 'var(--surface)', flexShrink: 0 }}>
+        <button style={tabStyle('daily')} onClick={() => setTab('daily')}>📢 Daily</button>
+        <button style={tabStyle('cleanup')} onClick={() => setTab('cleanup')}>🧹 Cleanup</button>
+        <button style={tabStyle('weekly')} onClick={() => setTab('weekly')}>📅 Weekly</button>
+      </div>
+      {/* 탭 콘텐츠 */}
+      <div style={{ flex: 1, overflow: 'hidden' }}>
+        {tab === 'daily'   && <BriefingView tasks={tasks} dataVersion={dataVersion} />}
+        {tab === 'cleanup' && <TaskCleanupView tasks={tasks} setTasks={setTasks} onResume={onGoToday} refreshTasks={refreshTasks} />}
+        {tab === 'weekly'  && (
+          <div style={{ padding: 32, color: 'var(--text-3)', textAlign: 'center', marginTop: 60 }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>📝</div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-2)', marginBottom: 8 }}>Weekly Review</div>
+            <div style={{ fontSize: 13 }}>이번 주 일지 + Task 자동 요약 예정 (구현 중)</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ─── App ─── */
 function App() {
   const today = useToday(); /* 자정 넘어가면 자동 갱신 */
@@ -4517,7 +4557,7 @@ function App() {
     try {return JSON.parse(localStorage.getItem('worklog.dark') || 'false');} catch (e) {return false;}
   });
   useEffect(() => {localStorage.setItem('worklog.dark', JSON.stringify(dark));}, [dark]);
-  const [view, setView] = useState('dashboard');
+  const [view, setView] = useState('today');
   const [tasks, setTasks] = useState(INIT_TASKS);
   const [projFilter, setProjFilter] = useState('전체');
   const [showExcel, setShowExcel] = useState(false);
@@ -4669,20 +4709,20 @@ function App() {
 
   function handleCalendarSelect(date) {
     setSelectedDate(date);
-    setView('dashboard');
+    setView('today');
   }
   const doingCount = tasks.filter((t) => t.status === 'DOING').length;
   const urgent = tasks.filter((t) => t.status !== 'DONE' && isUrgent(t.deadline));
 
   return (
     <div className="app">
-      <Sidebar view={view} setView={setView} dark={dark} setDark={setDark} projFilter={projFilter} setProjFilter={setProjFilter} projects={projects} onManageProjects={() => setShowProjMgr(true)} onSelectDate={handleCalendarSelect} selectedDate={selectedDate} journalDates={journalDates} />
+      <Sidebar view={view} setView={setView} dark={dark} setDark={setDark} projFilter={projFilter} setProjFilter={setProjFilter} projects={projects} onManageProjects={() => setShowProjMgr(true)} onSelectDate={handleCalendarSelect} selectedDate={selectedDate} journalDates={journalDates} setShowSearch={setShowSearch} />
       <div className="main">
         <div className="main-header">
-          {view === 'dashboard' && <>
+          {view === 'today' && <>
             <div>
               <div className="header-title">📅 {formatKoreanDate(selectedDate)}</div>
-              <div className="header-sub">대시보드</div>
+              <div className="header-sub">Today</div>
             </div>
             <div style={{ display: 'flex', gap: 8, marginLeft: 'auto', alignItems: 'center' }}>
               <div className="search-bar" onClick={() => setShowSearch(true)} style={{ cursor: 'pointer' }}>
@@ -4695,13 +4735,6 @@ function App() {
               <span className="badge badge-blue">DOING {doingCount}/5</span>
             </div>
           </>}
-          {view === 'board' && <>
-            <div>
-              <div className="header-title">📋 Board</div>
-              <div className="header-sub">Work Item 전체 현황</div>
-            </div>
-            <div style={{ marginLeft: 'auto' }} />
-          </>}
           {view === 'inbox' && <>
             <div>
               <div className="header-title">📥 Inbox</div>
@@ -4709,13 +4742,21 @@ function App() {
             </div>
             <div style={{ marginLeft: 'auto' }} />
           </>}
-          {view === 'briefing' && <>
+          {view === 'board' && <>
             <div>
-              <div className="header-title">📢 브리핑</div>
+              <div className="header-title">📋 Board</div>
+              <div className="header-sub">Work Item 전체 현황</div>
+            </div>
+            <div style={{ marginLeft: 'auto' }} />
+          </>}
+          {view === 'review' && <>
+            <div>
+              <div className="header-title">🔍 Review</div>
               <div className="header-sub">{formatKoreanDate(today)}</div>
             </div>
             <div style={{ marginLeft: 'auto' }} />
           </>}
+          {/* Gantt — 숨김 유지. 코드 보존. */}
           {view === 'gantt' && <>
             <div>
               <div className="header-title">📅 전체 일정</div>
@@ -4723,26 +4764,18 @@ function App() {
             </div>
             <div style={{ marginLeft: 'auto' }} />
           </>}
-          {view === 'cleanup' && <>
-            <div>
-              <div className="header-title">🧹 Task 정리</div>
-              <div className="header-sub">방치 Task와 취소된 Task를 정리하세요</div>
-            </div>
-            <div style={{ marginLeft: 'auto' }} />
-          </>}
         </div>
         <div className="main-body">
-          {view === 'dashboard' && <Dashboard tasks={tasks} setTasks={setTasks} projFilter={projFilter} projects={projects} selectedDate={selectedDate} setSelectedDate={setSelectedDate} refreshTasks={refreshTasks} dataVersion={dataVersion} bumpDataVersion={bumpDataVersion} journalDates={journalDates} refreshJournalDates={refreshJournalDates} />}
-          {view === 'board' && <BoardView tasks={tasks} projects={projects} refreshTasks={refreshTasks} />}
+          {view === 'today' && <Dashboard tasks={tasks} setTasks={setTasks} projFilter={projFilter} projects={projects} selectedDate={selectedDate} setSelectedDate={setSelectedDate} refreshTasks={refreshTasks} dataVersion={dataVersion} bumpDataVersion={bumpDataVersion} journalDates={journalDates} refreshJournalDates={refreshJournalDates} />}
           {view === 'inbox' && <InboxView tasks={tasks} projects={projects} refreshTasks={refreshTasks} />}
-          {view === 'briefing' && <BriefingView tasks={tasks} dataVersion={dataVersion} />}
+          {view === 'board' && <BoardView tasks={tasks} projects={projects} refreshTasks={refreshTasks} />}
+          {view === 'review' && <ReviewView tasks={tasks} setTasks={setTasks} dataVersion={dataVersion} refreshTasks={refreshTasks} onGoToday={() => setView('today')} />}
           {view === 'gantt' && <GanttView projFilter={projFilter} onImport={() => setShowExcel(true)} tasks={tasks} setSelectedDate={setSelectedDate} setView={setView} refreshTasks={refreshTasks} bumpDataVersion={bumpDataVersion} />}
-          {view === 'cleanup' && <TaskCleanupView tasks={tasks} setTasks={setTasks} onResume={() => setView('dashboard')} refreshTasks={refreshTasks} />}
         </div>
       </div>
       {showExcel && <ExcelModal onClose={() => setShowExcel(false)} />}
       {showProjMgr && <ProjectManager projects={projects} projectsRaw={projectsRaw} setProjects={setProjects} refreshProjects={refreshProjects} onClose={() => setShowProjMgr(false)} />}
-      {showSearch && <SearchModal tasks={tasks} onClose={() => setShowSearch(false)} onJumpDate={(d) => {setSelectedDate(d);setView('dashboard');}} dataVersion={dataVersion} />}
+      {showSearch && <SearchModal tasks={tasks} onClose={() => setShowSearch(false)} onJumpDate={(d) => {setSelectedDate(d);setView('today');setShowSearch(false);}} dataVersion={dataVersion} />}
       {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
       <TweaksUI values={tweaks} setTweak={setTweak} />
     </div>);
