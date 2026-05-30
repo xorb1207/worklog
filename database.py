@@ -15,6 +15,27 @@ def get_db():
     return conn
 
 
+def _migrate(conn):
+    """기존 DB에 신규 컬럼 추가 (없으면 추가, 있으면 무시).
+    테이블 재생성 없이 ALTER TABLE ADD COLUMN 으로 안전하게 확장."""
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(tasks)").fetchall()}
+    migrations = [
+        # (컬럼명, DDL 타입+기본값)
+        ("type",        "TEXT    DEFAULT 'TASK'"),   # TASK|WAITING|DECISION|ISSUE|FOLLOWUP
+        ("waiting_for", "TEXT    DEFAULT NULL"),      # /waiting @대상, /followup @대상
+        ("source_text", "TEXT    DEFAULT NULL"),      # 자동감지용 원문 보존 (현재는 수동 slash만)
+        ("confirmed",   "INTEGER DEFAULT 1"),         # 0=Inbox 후보, 1=확정됨 (현재는 항상 1)
+        ("resolved_at", "TEXT    DEFAULT NULL"),      # DECISION/ISSUE 종결 시각
+    ]
+    changed = False
+    for col, definition in migrations:
+        if col not in existing:
+            conn.execute(f"ALTER TABLE tasks ADD COLUMN {col} {definition}")
+            changed = True
+    if changed:
+        conn.commit()
+
+
 def init_db():
     conn = get_db()
     c = conn.cursor()
@@ -33,14 +54,19 @@ def init_db():
         CREATE TABLE IF NOT EXISTS tasks (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
             title        TEXT    NOT NULL,
-            status       TEXT    DEFAULT 'TODO',  -- TODO | DOING | DONE | CANCELLED
-            priority     TEXT    DEFAULT 'B',     -- A | B | C
+            status       TEXT    DEFAULT 'TODO',       -- TODO | DOING | DONE | CANCELLED
+            priority     TEXT    DEFAULT 'B',          -- A | B | C
             project      TEXT    DEFAULT '',
-            deadline     TEXT    DEFAULT NULL,    -- YYYY-MM-DD
+            deadline     TEXT    DEFAULT NULL,         -- YYYY-MM-DD
             note         TEXT    DEFAULT '',
             created_at   TEXT    DEFAULT (datetime('now','localtime')),
             updated_at   TEXT    DEFAULT (datetime('now','localtime')),
-            journal_date TEXT    DEFAULT NULL     -- 어느 날짜에 등록됐는지
+            journal_date TEXT    DEFAULT NULL,         -- 어느 날짜에 등록됐는지
+            type         TEXT    DEFAULT 'TASK',       -- TASK|WAITING|DECISION|ISSUE|FOLLOWUP
+            waiting_for  TEXT    DEFAULT NULL,         -- /waiting|/followup 대상자
+            source_text  TEXT    DEFAULT NULL,         -- 원문 문장 (자동감지용 예약)
+            confirmed    INTEGER DEFAULT 1,            -- 0=Inbox 후보, 1=확정
+            resolved_at  TEXT    DEFAULT NULL          -- DECISION/ISSUE 종결 시각
         )
     """)
 
@@ -54,6 +80,8 @@ def init_db():
     """)
 
     conn.commit()
+    # 기존 DB가 있는 경우 신규 컬럼을 안전하게 추가
+    _migrate(conn)
     conn.close()
 
 
@@ -150,13 +178,20 @@ def get_deadline_soon_tasks(days: int = 2):
     return [dict(r) for r in rows]
 
 
-def add_task(title, priority="B", project="", deadline=None, note="", journal_date=None) -> int:
+def add_task(title, priority="B", project="", deadline=None, note="", journal_date=None,
+             type="TASK", waiting_for=None, source_text=None, confirmed=1) -> int:
     if journal_date is None:
         journal_date = date.today().isoformat()
+    valid_types = {"TASK", "WAITING", "DECISION", "ISSUE", "FOLLOWUP"}
+    if type not in valid_types:
+        type = "TASK"
     conn = get_db()
     cur = conn.execute(
-        "INSERT INTO tasks (title,priority,project,deadline,note,journal_date) VALUES (?,?,?,?,?,?)",
-        (title, priority, project, deadline, note, journal_date)
+        "INSERT INTO tasks "
+        "(title,priority,project,deadline,note,journal_date,type,waiting_for,source_text,confirmed) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?)",
+        (title, priority, project, deadline, note, journal_date,
+         type, waiting_for, source_text, confirmed)
     )
     new_id = cur.lastrowid
     conn.commit()
@@ -175,7 +210,8 @@ def update_task_status(task_id: int, status: str):
 
 
 def update_task(task_id: int, **kwargs):
-    allowed = {"title", "status", "priority", "project", "deadline", "note"}
+    allowed = {"title", "status", "priority", "project", "deadline", "note",
+               "type", "waiting_for", "source_text", "confirmed", "resolved_at"}
     fields = {k: v for k, v in kwargs.items() if k in allowed}
     if not fields:
         return

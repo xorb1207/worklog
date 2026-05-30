@@ -144,6 +144,12 @@ body {
 .badge-prio-a { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; font-size: 10px; padding: 1px 5px; border-radius: 3px; font-weight: 700; }
 .badge-prio-b { background: #fef7e6; color: #a16207; border: 1px solid #fcd9a4; font-size: 10px; padding: 1px 5px; border-radius: 3px; font-weight: 700; }
 .badge-prio-c { background: var(--surface-2); color: var(--text-3); border: 1px solid var(--border); font-size: 10px; padding: 1px 5px; border-radius: 3px; }
+/* work-item type badges */
+.badge-type { font-size: 10px; padding: 1px 6px; border-radius: 3px; font-weight: 600; display: inline-flex; align-items: center; gap: 2px; }
+.badge-type-waiting  { background: var(--amber-light);  color: var(--amber); }
+.badge-type-decision { background: var(--green-light);  color: var(--green); }
+.badge-type-issue    { background: var(--red-light);    color: var(--red); }
+.badge-type-followup { background: var(--accent-light); color: var(--accent-text); }
 .btn { display: inline-flex; align-items: center; gap: 5px; padding: 5px 12px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid var(--border); background: var(--surface); color: var(--text-2); transition: background .12s, border-color .12s; font-family: var(--font); user-select: none; }
 .btn:hover { background: var(--surface-2); }
 .btn-primary { background: var(--text); color: var(--surface); border-color: var(--text); }
@@ -1248,15 +1254,21 @@ function localBackend(method, url, body) {
   // POST endpoints
   if (method === 'POST') {
     let mm;
-    if (url === '/tasks/add') {
+    if (url === '/tasks/add' || url === '/api/tasks/add') {
       const tasks = LS.loadTasks();
       const now = _nowIso();
       const id = LS.nextId();
       tasks.push({
         id, title: body.title, status: 'TODO', priority: body.priority || 'B',
-        project: body.project || '미분류', deadline: body.deadline || null,
+        project: body.project || '', deadline: body.deadline || null,
         note: body.note || '', journal_date: body.journal_date || _todayLocal(),
-        created_at: now, updated_at: now
+        created_at: now, updated_at: now,
+        /* work-item 확장 */
+        type:        body.type        || 'TASK',
+        waiting_for: body.waiting_for || null,
+        source_text: body.source_text || null,
+        confirmed:   body.confirmed   != null ? body.confirmed : 1,
+        resolved_at: null,
       });
       LS.saveTasks(tasks);
       return { ok: true, id };
@@ -1337,6 +1349,23 @@ async function POST(url, body) {
   }
 }
 /* 백엔드(snake_case) → 프론트(camelCase) 정규화 */
+/* ── Work Item 타입 메타데이터 ──────────────────────────────────────────────── */
+const TYPE_META = {
+  TASK:     { icon: '',   label: 'Task',   cls: '',                  deadlineLabel: '마감',    autoStart: true  },
+  WAITING:  { icon: '⏳', label: '대기',   cls: 'badge-type-waiting',  deadlineLabel: '확인일',  autoStart: false },
+  DECISION: { icon: '✅', label: '결정',   cls: 'badge-type-decision', deadlineLabel: '결정일',  autoStart: false },
+  ISSUE:    { icon: '⚠', label: '이슈',   cls: 'badge-type-issue',    deadlineLabel: '해결목표', autoStart: false },
+  FOLLOWUP: { icon: '🔁', label: '팔로업', cls: 'badge-type-followup', deadlineLabel: '팔로업',  autoStart: false },
+};
+/* slash 명령어 → TYPE_META 키 매핑 */
+const SLASH_CMD_MAP = {
+  task: 'TASK', t: 'TASK', '할일': 'TASK',
+  waiting: 'WAITING', w: 'WAITING',
+  decision: 'DECISION', d: 'DECISION',
+  issue: 'ISSUE', i: 'ISSUE',
+  followup: 'FOLLOWUP', f: 'FOLLOWUP',
+};
+
 function normalizeTask(t) {
   if (!t) return t;
   return {
@@ -1349,7 +1378,13 @@ function normalizeTask(t) {
     note: t.note || '',
     createdAt: (t.created_at || '').slice(0, 10),
     updatedAt: (t.updated_at || '').slice(0, 10),
-    journalDate: t.journal_date || null
+    journalDate: t.journal_date || null,
+    /* work-item 확장 필드 */
+    type:       t.type        || 'TASK',
+    waitingFor: t.waiting_for || null,
+    sourceText: t.source_text || null,
+    confirmed:  t.confirmed   != null ? t.confirmed : 1,
+    resolvedAt: t.resolved_at || null,
   };
 }
 
@@ -1615,9 +1650,11 @@ function Sidebar({ view, setView, dark, setDark, projFilter, setProjFilter, proj
         <div className={`nav-item${view === 'briefing' ? ' active' : ''}`} onClick={() => setView('briefing')}>
           <span className="icon">📋</span> 브리핑
         </div>
-        <div className={`nav-item${view === 'gantt' ? ' active' : ''}`} onClick={() => setView('gantt')}>
-          <span className="icon">📅</span> 전체 일정
-        </div>
+        {/* Gantt — Advanced View. 기본 메뉴에서 숨김. Board > Timeline 탭에서 접근 예정.
+            활성화하려면 아래 주석을 해제:
+            <div className={`nav-item${view === 'gantt' ? ' active' : ''}`} onClick={() => setView('gantt')}>
+              <span className="icon">📅</span> 전체 일정
+            </div> */}
         <div className={`nav-item${view === 'cleanup' ? ' active' : ''}`} onClick={() => setView('cleanup')}>
           <span className="icon">🧹</span> Task 정리
         </div>
@@ -1878,61 +1915,94 @@ function Dashboard({ tasks, setTasks, projFilter, projects, selectedDate, setSel
      - 체크박스 [ ] / [x] 토글: Ctrl/Cmd+Click */
   function onJournalKeyDown(e) {
     const ta = e.target;
-    /* /task 슬래시 명령 — Enter 시 Task 생성 + 라인을 체크박스로 변환 */
+    /* 슬래시 명령 — Enter 시 Work Item 생성 + 라인을 체크박스로 변환
+       지원 명령: /task(t/할일), /waiting(w), /decision(d), /issue(i), /followup(f) */
     if (slashCmd && e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229) {
       e.preventDefault();
       const value = ta.value;
       const lineStart = slashCmd.lineStart;
       const lineEnd = value.indexOf('\n', lineStart) === -1 ? value.length : value.indexOf('\n', lineStart);
       const raw = value.slice(lineStart, lineEnd);
-      // /task <제목> [!A|!B|!C] [~MM/DD] [@프로젝트]  파싱
-      let title = raw.replace(/^\/(?:task|할일|t)\s+/i, '');
-      let prio = 'B',deadline = null,project = projFilter !== '전체' ? projFilter : '미분류';
-      title = title.replace(/!([ABCabc])\b/, (_, p) => {prio = p.toUpperCase();return '';});
-      title = title.replace(/@(\S+)/, (_, p) => {project = p;return '';});
+      const cmdType = slashCmd.cmdType || 'TASK';
+
+      // 슬래시 명령 prefix 제거 후 나머지 파싱
+      let title = raw.replace(/^\/\S+\s+/i, '');
+      let prio = 'B', deadline = null;
+      let project = projFilter !== '전체' ? projFilter : '';
+      let waitingFor = null;
+
+      // 공통 파싱: 우선순위(!A/B/C), 날짜(~MM/DD)
+      title = title.replace(/!([ABCabc])\b/, (_, p) => { prio = p.toUpperCase(); return ''; });
       title = title.replace(/~(\d{1,2})\/(\d{1,2})/, (_, m, d) => {
         const yy = new Date().getFullYear();
         deadline = `${yy}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
         return '';
       });
+
+      // @mention: WAITING/FOLLOWUP은 waiting_for, 나머지는 project
+      if (cmdType === 'WAITING' || cmdType === 'FOLLOWUP') {
+        title = title.replace(/@(\S+)/, (_, p) => { waitingFor = p; return ''; });
+      } else {
+        title = title.replace(/@(\S+)/, (_, p) => { project = p; return ''; });
+      }
       title = title.trim();
-      if (!title) {setSlashCmd(null);return;}
-      // 일지 라인을 체크박스 + Task 링크로 치환 (간트의 "일지에 기록"과 동일 포맷)
-      const replacement = `- [ ] ${title}` + (
-      deadline ? ` (~${deadline.slice(5).replace('-', '/')})` : '') + (
-      prio !== 'B' ? ` !${prio}` : '') +
-      ` 📌` + (
-      project && project !== '미분류' ? ` @${project}` : '');
+      if (!title) { setSlashCmd(null); return; }
+
+      // 일지 라인 치환 — 타입별 아이콘/체크마크
+      const meta = TYPE_META[cmdType] || TYPE_META.TASK;
+      const checkMark = cmdType === 'DECISION' ? 'x' : ' ';
+      const iconPrefix = meta.icon ? `${meta.icon} ` : '';
+      let replacement = `- [${checkMark}] ${iconPrefix}${title}`;
+      if (deadline) replacement += ` (~${deadline.slice(5).replace('-', '/')})`;
+      if (prio !== 'B') replacement += ` !${prio}`;
+      if (cmdType === 'TASK') {
+        replacement += ` 📌`;
+        if (project) replacement += ` @${project}`;
+      } else if (waitingFor) {
+        replacement += ` @${waitingFor}`;
+      }
+
       const newValue = value.slice(0, lineStart) + replacement + value.slice(lineEnd);
       setJournalText(newValue);
-      const caret = lineStart + replacement.length;
-      requestAnimationFrame(() => {ta.selectionStart = ta.selectionEnd = caret;});
+      const newCaret = lineStart + replacement.length;
+      requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = newCaret; });
       setSlashCmd(null);
-      // Task 생성 — 오늘 일지에서 /task로 추가 시 자동으로 DOING 시작
-      const startNow = selectedDate === TODAY;
+
+      // TASK + 오늘 일지 → 자동 DOING 승격. 나머지 타입은 그대로 TODO
+      // DECISION은 생성 시 즉시 DONE (결정 기록)
+      const startNow = cmdType === 'TASK' && selectedDate === TODAY;
+      const initDone = cmdType === 'DECISION';
+
       (async () => {
         try {
           const res = await POST('/api/tasks/add', {
-            title, priority: prio, project, deadline,
-            note: '', journal_date: selectedDate
+            title, priority: prio, project: project || '',
+            deadline, note: '', journal_date: selectedDate,
+            type: cmdType,
+            waiting_for: waitingFor || null,
           });
-          // 오늘이면 응답 id로 즉시 DOING으로 승격
           if (startNow && res && res.id) {
             await POST(`/api/tasks/${res.id}/status`, { status: 'DOING' });
+          } else if (initDone && res && res.id) {
+            await POST(`/api/tasks/${res.id}/status`, { status: 'DONE' });
           }
           await refreshTasks();
+          // 토스트 메시지
+          const dl = deadline ? ` · ${meta.deadlineLabel} ${deadline.slice(5)}` : '';
+          const wf = waitingFor ? ` · @${waitingFor}` : '';
+          const statusHint = startNow ? ' (DOING)' : initDone ? ' (결정됨)' : '';
           toast(
-            `${startNow ? '▶ 시작' : '✓ 추가'} "${title}" · 📁 ${project}${deadline ? ' · 마감 ' + deadline.slice(5) : ''}${startNow ? ' (DOING)' : ''}`,
+            `${meta.icon || '✓'} ${cmdType !== 'TASK' ? `[${meta.label}] ` : ''}${startNow ? '▶ 시작' : '+ 추가'} "${title}"${dl}${wf}${statusHint}`,
             { kind: 'success', duration: 4000 }
           );
         } catch (err) {
           console.error(err);
-          toast(`⚠ Task 생성 실패: ${err.message}`, { duration: 4000 });
+          toast(`⚠ 항목 생성 실패: ${err.message}`, { duration: 4000 });
         }
       })();
       return;
     }
-    if (slashCmd && e.key === 'Escape') {e.preventDefault();setSlashCmd(null);return;}
+    if (slashCmd && e.key === 'Escape') { e.preventDefault(); setSlashCmd(null); return; }
     /* 태그 자동완성 활성 시 Enter→삽입 / Esc→닫기 / Tab→삽입 */
     if (tagSuggest && tagSuggest.tags.length > 0) {
       if ((e.key === 'Enter' || e.key === 'Tab') && !e.nativeEvent.isComposing && e.keyCode !== 229) {e.preventDefault();insertTag(tagSuggest.tags[0]);return;}
@@ -2056,12 +2126,13 @@ function Dashboard({ tasks, setTasks, projFilter, projects, selectedDate, setSel
     const caret = ta.selectionStart;
     const before = value.slice(0, caret);
 
-    /* /task 또는 /할일 감지 — 줄 시작에서 */
+    /* 슬래시 명령 감지 — 줄 시작에서 /task /waiting /decision /issue /followup (단축키 포함) */
     const lineStart = before.lastIndexOf('\n') + 1;
     const lineSoFar = before.slice(lineStart);
-    const slashM = lineSoFar.match(/^\/(?:task|할일|t)\s+(.*)$/i);
-    if (slashM) {
-      setSlashCmd({ anchor: caret, query: slashM[1], lineStart });
+    const slashM = lineSoFar.match(/^\/(\w+|할일)\s+(.*)$/i);
+    const cmdType = slashM ? SLASH_CMD_MAP[slashM[1].toLowerCase()] : null;
+    if (slashM && cmdType) {
+      setSlashCmd({ anchor: caret, query: slashM[2], lineStart, cmdType });
     } else {
       setSlashCmd(null);
     }
@@ -2267,21 +2338,34 @@ function Dashboard({ tasks, setTasks, projFilter, projects, selectedDate, setSel
           onChange={onJournalChange}
           onKeyDown={onJournalKeyDown}
           onClick={onJournalClick}
-          placeholder={`오늘 한 일, 회의 내용, 이슈 등을 자유롭게 기록하세요.\n\n팁:\n• /task 제목  →  Enter로 Task 즉시 생성 (오늘 일지면 자동 시작 ▶)\n  예: /task 보고서 초안 !A ~5/10 @보고서)\n• "- " 치고 엔터 → 다음 줄도 자동 리스트\n• "- [ ] " 치고 엔터 → 체크박스 리스트\n• ⌘/Ctrl + 클릭 → 체크박스 토글`} />
+          placeholder={`오늘 한 일, 회의 내용, 이슈 등을 자유롭게 기록하세요.\n\n슬래시 명령:\n• /task 제목 !A ~5/10 @프로젝트  →  Task 생성 (오늘이면 자동 시작 ▶)\n• /waiting 제목 @대기대상 ~확인일  →  대기 항목\n• /decision 결정 내용              →  결정 기록 (즉시 완료 처리)\n• /issue 이슈 내용 !A              →  이슈 등록\n• /followup 제목 @대상 ~날짜       →  팔로업\n\n• "- " 치고 엔터 → 리스트  •  "- [ ] " → 체크박스  •  ⌘+클릭 → 체크박스 토글`} />
           }
-          {!foldMode && slashCmd &&
-          <div style={{ position: 'absolute', bottom: 10, left: 10, right: 10, background: 'var(--text)', color: 'var(--surface)', borderRadius: 8, padding: '10px 14px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 10, zIndex: 50, boxShadow: '0 8px 24px rgba(0,0,0,.18)' }}>
-              <span style={{ fontSize: 16 }}>📌</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, marginBottom: 2 }}>
-                  {slashCmd.query.trim() ? <>{selectedDate === TODAY ? '▶ 시작' : '+ 추가'}: <span style={{ color: 'var(--accent)', opacity: .95 }}>"{slashCmd.query.replace(/!([ABCabc])\b/g, '').replace(/@\S+/g, '').replace(/~\d{1,2}\/\d{1,2}/g, '').trim() || '...'}"</span></> : <span style={{ opacity: .7 }}>Task 제목을 입력하세요</span>}
-                </div>
-                <div style={{ fontSize: 10, opacity: .65, lineHeight: 1.5 }}>
-                  Enter로 {selectedDate === TODAY ? '바로 시작 (DOING)' : '생성 (TODO)'} · Esc로 취소 · 옵션: <code style={{ fontFamily: 'var(--mono)', opacity: .9 }}>!A</code>(우선순위) <code style={{ fontFamily: 'var(--mono)', opacity: .9 }}>~5/10</code>(마감) <code style={{ fontFamily: 'var(--mono)', opacity: .9 }}>@프로젝트</code>
+          {!foldMode && slashCmd && (() => {
+            const meta = TYPE_META[slashCmd.cmdType] || TYPE_META.TASK;
+            const cleanTitle = slashCmd.query.replace(/!([ABCabc])\b/g, '').replace(/@\S+/g, '').replace(/~\d{1,2}\/\d{1,2}/g, '').trim();
+            const isTask = slashCmd.cmdType === 'TASK';
+            const actionLabel = slashCmd.cmdType === 'DECISION' ? '✅ 결정 기록'
+              : isTask && selectedDate === TODAY ? '▶ 시작'
+              : `${meta.icon || '+'} ${meta.label} 추가`;
+            return (
+              <div style={{ position: 'absolute', bottom: 10, left: 10, right: 10, background: 'var(--text)', color: 'var(--surface)', borderRadius: 8, padding: '10px 14px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 10, zIndex: 50, boxShadow: '0 8px 24px rgba(0,0,0,.18)' }}>
+                <span style={{ fontSize: 16 }}>{meta.icon || '📌'}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 2 }}>
+                    {cleanTitle
+                      ? <>{actionLabel}: <span style={{ color: 'var(--accent)', opacity: .95 }}>"{cleanTitle}"</span></>
+                      : <span style={{ opacity: .7 }}>{meta.label} 제목을 입력하세요</span>}
+                  </div>
+                  <div style={{ fontSize: 10, opacity: .65, lineHeight: 1.5 }}>
+                    Enter로 생성 · Esc 취소
+                    {isTask && <> · <code style={{ fontFamily: 'var(--mono)', opacity: .9 }}>!A</code> 우선순위 <code style={{ fontFamily: 'var(--mono)', opacity: .9 }}>~5/10</code> {meta.deadlineLabel} <code style={{ fontFamily: 'var(--mono)', opacity: .9 }}>@프로젝트</code></>}
+                    {(slashCmd.cmdType === 'WAITING' || slashCmd.cmdType === 'FOLLOWUP') && <> · <code style={{ fontFamily: 'var(--mono)', opacity: .9 }}>@대상자</code> <code style={{ fontFamily: 'var(--mono)', opacity: .9 }}>~{meta.deadlineLabel}</code></>}
+                  </div>
                 </div>
               </div>
-            </div>
-          }
+            );
+          })()}
+
           {!foldMode && tagSuggest && tagSuggest.tags.length > 0 &&
           <div style={{ position: 'absolute', top: 0, left: 0, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, boxShadow: '0 8px 24px rgba(0,0,0,.12)', padding: 4, minWidth: 160, zIndex: 50 }}>
               <div style={{ fontSize: 9, color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: '.5px', padding: '4px 8px 2px' }}>태그 추천</div>
@@ -2617,21 +2701,34 @@ function TaskCard({ task, onStatus, onDelete, onUpdate, projects = [] }) {
 
   }
 
+  const itemType = task.type || 'TASK';
+  const typeMeta = TYPE_META[itemType] || TYPE_META.TASK;
+  const dlLabel = typeMeta.deadlineLabel;
+
   return (
     <div className="task-card" style={{ borderLeft: `3px solid ${task.priority === 'A' ? 'var(--prio-a)' : task.priority === 'B' ? 'var(--prio-b)' : 'var(--border-2)'}` }}>
       <div className="task-card-top">
         <div style={{ flex: 1, cursor: 'text' }} onDoubleClick={startEdit} title="더블클릭해서 편집">
           <div className="task-card-title">{task.title}</div>
           <div className="task-card-meta" style={{ marginTop: 4 }}>
+            {/* type badge — TASK는 표시 안 함 (기존과 동일) */}
+            {itemType !== 'TASK' && (
+              <span className={`badge-type ${typeMeta.cls}`}>{typeMeta.icon} {typeMeta.label}</span>
+            )}
             <span className={`badge-prio-${task.priority.toLowerCase()}`}>{task.priority}</span>
             {task.project && <span style={{ fontSize: 10, color: 'var(--text-4)' }}>📁 {task.project}</span>}
-            {task.deadline && <span style={{ fontSize: 10, color: isUrgent(task.deadline) ? 'var(--red)' : 'var(--text-4)' }}>📅 {fmt(task.deadline)}{isToday(task.deadline) ? ' (오늘!)' : ''}</span>}
+            {/* WAITING/FOLLOWUP: waiting_for 표시 */}
+            {task.waitingFor && <span style={{ fontSize: 10, color: 'var(--text-3)' }}>👤 {task.waitingFor}</span>}
+            {/* deadline 라벨을 type에 따라 변경 */}
+            {task.deadline && <span style={{ fontSize: 10, color: isUrgent(task.deadline) ? 'var(--red)' : 'var(--text-4)' }}>{dlLabel} {fmt(task.deadline)}{isToday(task.deadline) ? ' (오늘!)' : ''}</span>}
           </div>
         </div>
       </div>
       {task.note && expanded && <div style={{ fontSize: 11, color: 'var(--text-3)', background: 'var(--surface-2)', borderRadius: 3, padding: '4px 7px' }}>📌 {task.note}</div>}
       <div className="task-card-actions">
-        <button className="icon-btn done" onClick={() => onStatus(task.id, 'DONE')}>✓ 완료</button>
+        {itemType === 'DECISION'
+          ? <button className="icon-btn done" onClick={() => onStatus(task.id, 'DONE')}>✅ 확정</button>
+          : <button className="icon-btn done" onClick={() => onStatus(task.id, 'DONE')}>✓ 완료</button>}
         <button className="icon-btn" onClick={() => onStatus(task.id, 'TODO')}>⏸ 대기</button>
         {task.note && <button className="icon-btn" onClick={() => setExpanded(!expanded)}>{expanded ? '▲' : '▼'} 메모</button>}
         <button className="icon-btn" onClick={startEdit} title="편집">✏️ 편집</button>

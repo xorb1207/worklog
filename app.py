@@ -84,12 +84,16 @@ def add_task():
     if not title:
         return jsonify({"ok": False, "msg": "title is required"}), 400
     new_id = db.add_task(
-        title       = title,
-        priority    = data.get("priority", "B"),
-        project     = data.get("project", ""),
-        deadline    = data.get("deadline") or None,
-        note        = data.get("note", ""),
-        journal_date= data.get("journal_date", date.today().isoformat())
+        title        = title,
+        priority     = data.get("priority", "B"),
+        project      = data.get("project", ""),
+        deadline     = data.get("deadline") or None,
+        note         = data.get("note", ""),
+        journal_date = data.get("journal_date", date.today().isoformat()),
+        type         = data.get("type", "TASK"),
+        waiting_for  = data.get("waiting_for") or None,
+        source_text  = data.get("source_text") or None,
+        confirmed    = data.get("confirmed", 1),
     )
     return jsonify({"ok": True, "id": new_id})
 
