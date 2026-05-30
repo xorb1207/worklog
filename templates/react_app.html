@@ -1650,6 +1650,9 @@ function Sidebar({ view, setView, dark, setDark, projFilter, setProjFilter, proj
         <div className={`nav-item${view === 'board' ? ' active' : ''}`} onClick={() => setView('board')}>
           <span className="icon">📋</span> Board
         </div>
+        <div className={`nav-item${view === 'inbox' ? ' active' : ''}`} onClick={() => setView('inbox')}>
+          <span className="icon">📥</span> Inbox
+        </div>
         <div className={`nav-item${view === 'briefing' ? ' active' : ''}`} onClick={() => setView('briefing')}>
           <span className="icon">📢</span> 브리핑
         </div>
@@ -3819,6 +3822,241 @@ function BoardItemCard({ task, projects = [], onStatus, onDelete, onUpdate, edit
   );
 }
 
+/* ─── Inbox View ───────────────────────────────────────────────────────────────
+   후보 기준 (4가지, 중복 허용 → 합산 후 dedup):
+   1. confirmed = 0          — 미확인 항목
+   2. project 없음 / 미분류  — 분류 안 된 항목 (active 상태만)
+   3. A/B 우선순위인데 deadline 없음 (active)
+   4. type = WAITING & waiting_for 비어 있음 (active)
+   ─────────────────────────────────────────────────────────────────────────── */
+function InboxView({ tasks, projects = [], refreshTasks }) {
+  const toast = useToast();
+  const [filterKey,  setFilterKey]  = useState('all');
+  const [editingId,  setEditingId]  = useState(null);
+
+  const active = tasks.filter((t) => !['DONE', 'CANCELLED'].includes(t.status));
+
+  const buckets = {
+    unconfirmed:  tasks.filter((t) => t.confirmed === 0),
+    unclassified: active.filter((t) => !t.project || t.project === '미분류'),
+    noDeadline:   active.filter((t) => ['A', 'B'].includes(t.priority) && !t.deadline),
+    noWaitingFor: active.filter((t) => t.type === 'WAITING' && !t.waitingFor),
+  };
+
+  /* 전체 = 4 버킷 합산 dedup */
+  const allInbox = [...new Map(
+    [...buckets.unconfirmed, ...buckets.unclassified,
+     ...buckets.noDeadline,  ...buckets.noWaitingFor].map((t) => [t.id, t])
+  ).values()];
+
+  const filtered =
+    filterKey === 'unconfirmed'  ? buckets.unconfirmed  :
+    filterKey === 'unclassified' ? buckets.unclassified :
+    filterKey === 'noDeadline'   ? buckets.noDeadline   :
+    filterKey === 'noWaitingFor' ? buckets.noWaitingFor :
+    allInbox;
+
+  const FILTERS = [
+    { key: 'all',          label: `전체`,          count: allInbox.length },
+    { key: 'unconfirmed',  label: `확인 필요`,     count: buckets.unconfirmed.length },
+    { key: 'unclassified', label: `미분류`,        count: buckets.unclassified.length },
+    { key: 'noDeadline',   label: `날짜 없음`,     count: buckets.noDeadline.length },
+    { key: 'noWaitingFor', label: `대기 대상 없음`, count: buckets.noWaitingFor.length },
+  ];
+
+  async function confirmItem(id) {
+    try {
+      await POST(`/api/tasks/${id}/edit`, { confirmed: 1 });
+      await refreshTasks();
+      toast('✓ 확정됨', { kind: 'success' });
+    } catch (e) { toast('⚠ 오류: ' + e.message); }
+  }
+  async function ignoreItem(id) {
+    try {
+      await POST(`/api/tasks/${id}/status`, { status: 'CANCELLED' });
+      await refreshTasks();
+      toast('무시됨');
+    } catch (e) { toast('⚠ 오류: ' + e.message); }
+  }
+  async function updateItem(id, patch) {
+    try { await POST(`/api/tasks/${id}/edit`, patch); await refreshTasks(); }
+    catch (e) { toast('⚠ 수정 실패'); }
+  }
+
+  /* 어떤 버킷에 속하는지 이유 태그 */
+  function reasonTags(task) {
+    const tags = [];
+    if (task.confirmed === 0)                                             tags.push({ label: '확인 필요', color: 'var(--amber)' });
+    if (!task.project || task.project === '미분류')                       tags.push({ label: '미분류',    color: 'var(--accent-text)' });
+    if (['A','B'].includes(task.priority) && !task.deadline)              tags.push({ label: '날짜 없음', color: 'var(--red)' });
+    if (task.type === 'WAITING' && !task.waitingFor)                      tags.push({ label: '대상 없음', color: 'var(--text-3)' });
+    return tags;
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+
+      {/* ── 요약 카드 ── */}
+      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', background: 'var(--surface)', flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {[
+            { label: '확인 필요',     count: buckets.unconfirmed.length,  color: 'var(--amber)' },
+            { label: '미분류',        count: buckets.unclassified.length, color: 'var(--accent)' },
+            { label: '날짜 없음',     count: buckets.noDeadline.length,   color: 'var(--red)' },
+            { label: '대기 대상 없음', count: buckets.noWaitingFor.length, color: 'var(--text-3)' },
+          ].map(({ label, count, color }) => (
+            <div key={label} style={{ flex: 1, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '8px 10px', minWidth: 0 }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color, lineHeight: 1.2 }}>{count}</div>
+              <div style={{ fontSize: 10, color: 'var(--text-4)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── 필터 chips ── */}
+      <div style={{ padding: '7px 16px', borderBottom: '1px solid var(--border)', background: 'var(--surface-2)', display: 'flex', gap: 5, flexShrink: 0, flexWrap: 'wrap', alignItems: 'center' }}>
+        {FILTERS.map(({ key, label, count }) => (
+          <div key={key} className={`filter-chip${filterKey === key ? ' active' : ''}`}
+            onClick={() => setFilterKey(key)}>
+            {label}{count > 0 ? ` (${count})` : ''}
+          </div>
+        ))}
+        {allInbox.length === 0 && (
+          <span style={{ fontSize: 11, color: 'var(--green)', marginLeft: 6 }}>Inbox가 비어 있어요 ✨</span>
+        )}
+      </div>
+
+      {/* ── 아이템 목록 ── */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 5 }}>
+        {filtered.length === 0 && (
+          <div style={{ textAlign: 'center', color: 'var(--text-4)', fontSize: 13, padding: '48px 0' }}>
+            이 범주에 항목이 없습니다 ✨
+          </div>
+        )}
+        {filtered.map((task) => (
+          <InboxItemCard key={task.id} task={task} projects={projects}
+            reasons={reasonTags(task)}
+            onConfirm={confirmItem} onIgnore={ignoreItem} onUpdate={updateItem}
+            editing={editingId === task.id}
+            onEdit={() => setEditingId(task.id)}
+            onEditDone={() => setEditingId(null)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Inbox Item Card ─── */
+function InboxItemCard({ task, projects = [], reasons = [], onConfirm, onIgnore, onUpdate, editing, onEdit, onEditDone }) {
+  const [draft, setDraft] = useState({ ...task });
+  const itemType = task.type || 'TASK';
+  const typeMeta = TYPE_META[itemType] || TYPE_META.TASK;
+
+  function saveEdit() {
+    const title = (draft.title || '').trim();
+    if (!title) return;
+    onUpdate && onUpdate(task.id, {
+      title,
+      priority:    draft.priority,
+      project:     draft.project     || '',
+      deadline:    draft.deadline    || null,
+      note:        (draft.note || '').trim(),
+      type:        draft.type        || 'TASK',
+      waiting_for: draft.waitingFor  || null,
+    });
+    onEditDone && onEditDone();
+  }
+
+  /* ── 편집 모드 ── */
+  if (editing) {
+    const TYPE_OPTIONS = ['TASK', 'WAITING', 'DECISION', 'ISSUE', 'FOLLOWUP'];
+    return (
+      <div className="task-card" style={{ borderLeft: `3px solid ${draft.priority === 'A' ? 'var(--prio-a)' : draft.priority === 'B' ? 'var(--prio-b)' : 'var(--border-2)'}`, background: 'var(--surface-2)' }}>
+        <input autoFocus value={draft.title || ''} onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); saveEdit(); } if (e.key === 'Escape') { setDraft({ ...task }); onEditDone(); } }}
+          style={{ width: '100%', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '4px 6px', fontSize: 13, fontFamily: 'var(--font)', color: 'var(--text)', background: 'var(--surface)', outline: 'none', fontWeight: 600 }} />
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6, alignItems: 'center' }}>
+          {/* type 변경 */}
+          <select value={draft.type || 'TASK'} onChange={(e) => setDraft({ ...draft, type: e.target.value })}
+            style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '2px 6px', fontSize: 11, background: 'var(--surface)', color: 'var(--text)', fontFamily: 'var(--font)', cursor: 'pointer' }}>
+            {TYPE_OPTIONS.map((t) => <option key={t} value={t}>{TYPE_META[t]?.icon || ''} {TYPE_META[t]?.label || t}</option>)}
+          </select>
+          <div className="prio-btns">
+            {['A', 'B', 'C'].map((p) => (
+              <button key={p} className={`prio-btn${draft.priority === p ? ` sel-${p.toLowerCase()}` : ''}`} onClick={() => setDraft({ ...draft, priority: p })}>{p}</button>
+            ))}
+          </div>
+          <select value={draft.project || ''} onChange={(e) => setDraft({ ...draft, project: e.target.value })}
+            style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '2px 6px', fontSize: 11, background: 'var(--surface)', color: 'var(--text)', fontFamily: 'var(--font)', cursor: 'pointer' }}>
+            <option value="">📁 프로젝트 선택</option>
+            {projects.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+          <input type="date" value={draft.deadline || ''} onChange={(e) => setDraft({ ...draft, deadline: e.target.value })}
+            style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '2px 5px', fontSize: 11, background: 'var(--surface)', color: 'var(--text)', fontFamily: 'var(--font)', cursor: 'pointer' }} />
+          {(draft.type === 'WAITING' || draft.type === 'FOLLOWUP') && (
+            <input value={draft.waitingFor || ''} onChange={(e) => setDraft({ ...draft, waitingFor: e.target.value })}
+              placeholder="@대상자" style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '2px 6px', fontSize: 11, background: 'var(--surface)', color: 'var(--text)', fontFamily: 'var(--font)', width: 80 }} />
+          )}
+        </div>
+        <div className="task-card-actions" style={{ marginTop: 6 }}>
+          <button className="icon-btn done" onClick={saveEdit}>✓ 저장</button>
+          <button className="icon-btn" onClick={() => { setDraft({ ...task }); onEditDone(); }}>취소</button>
+          <span style={{ marginLeft: 'auto', fontSize: 9, color: 'var(--text-4)' }}>⏎ 저장 · Esc 취소</span>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── 읽기 모드 ── */
+  return (
+    <div className="task-card" style={{ borderLeft: `3px solid ${task.priority === 'A' ? 'var(--prio-a)' : task.priority === 'B' ? 'var(--prio-b)' : 'var(--border-2)'}` }}>
+      <div className="task-card-top">
+        <div style={{ flex: 1, cursor: 'text' }} onDoubleClick={onEdit} title="더블클릭해서 편집">
+          <div className="task-card-title">{task.title}</div>
+          <div className="task-card-meta" style={{ marginTop: 3 }}>
+            {/* type badge */}
+            {itemType !== 'TASK' && (
+              <span className={`badge-type ${typeMeta.cls}`}>{typeMeta.icon} {typeMeta.label}</span>
+            )}
+            <span className={`badge-prio-${task.priority.toLowerCase()}`}>{task.priority}</span>
+            {task.project
+              ? <span style={{ fontSize: 10, color: 'var(--text-4)' }}>📁 {task.project}</span>
+              : <span style={{ fontSize: 10, color: 'var(--amber)', fontStyle: 'italic' }}>📁 미분류</span>}
+            {task.waitingFor && <span style={{ fontSize: 10, color: 'var(--text-3)' }}>👤 {task.waitingFor}</span>}
+            {task.deadline
+              ? <span style={{ fontSize: 10, color: isUrgent(task.deadline) ? 'var(--red)' : 'var(--text-4)' }}>{typeMeta.deadlineLabel} {fmt(task.deadline)}</span>
+              : ['A','B'].includes(task.priority) && <span style={{ fontSize: 10, color: 'var(--amber)', fontStyle: 'italic' }}>날짜 없음</span>}
+          </div>
+          {/* 이유 태그 */}
+          {reasons.length > 0 && (
+            <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
+              {reasons.map(({ label, color }) => (
+                <span key={label} style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: 'var(--surface-2)', border: '1px solid var(--border)', color, fontWeight: 600, letterSpacing: '-0.1px' }}>
+                  {label}
+                </span>
+              ))}
+            </div>
+          )}
+          {/* source_text — 자동감지 원문 (현재는 slash 명령에서 미입력, 향후 자동감지 시 표시) */}
+          {task.sourceText && (
+            <div style={{ fontSize: 10, color: 'var(--text-4)', marginTop: 3, padding: '2px 6px', background: 'var(--surface-2)', borderRadius: 3, fontStyle: 'italic', borderLeft: '2px solid var(--border-2)' }}>
+              "{task.sourceText}"
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="task-card-actions">
+        <button className="icon-btn done" onClick={() => onConfirm(task.id)} title="이 항목을 확정 처리합니다">✓ 확정</button>
+        <button className="icon-btn" onClick={onEdit}>✏️ 편집</button>
+        <button className="icon-btn" style={{ color: 'var(--text-3)' }} onClick={() => onIgnore(task.id)} title="무시 (취소 처리)">✕ 무시</button>
+        {/* TODO: [Board에서 보기] — 2단계에서 구현 */}
+      </div>
+    </div>
+  );
+}
+
 /* ─── Task 정리 View ─── */
 function TaskCleanupView({ tasks, setTasks, onResume, refreshTasks }) {
   const toast = useToast();
@@ -4464,6 +4702,13 @@ function App() {
             </div>
             <div style={{ marginLeft: 'auto' }} />
           </>}
+          {view === 'inbox' && <>
+            <div>
+              <div className="header-title">📥 Inbox</div>
+              <div className="header-sub">미정리 항목 처리</div>
+            </div>
+            <div style={{ marginLeft: 'auto' }} />
+          </>}
           {view === 'briefing' && <>
             <div>
               <div className="header-title">📢 브리핑</div>
@@ -4489,6 +4734,7 @@ function App() {
         <div className="main-body">
           {view === 'dashboard' && <Dashboard tasks={tasks} setTasks={setTasks} projFilter={projFilter} projects={projects} selectedDate={selectedDate} setSelectedDate={setSelectedDate} refreshTasks={refreshTasks} dataVersion={dataVersion} bumpDataVersion={bumpDataVersion} journalDates={journalDates} refreshJournalDates={refreshJournalDates} />}
           {view === 'board' && <BoardView tasks={tasks} projects={projects} refreshTasks={refreshTasks} />}
+          {view === 'inbox' && <InboxView tasks={tasks} projects={projects} refreshTasks={refreshTasks} />}
           {view === 'briefing' && <BriefingView tasks={tasks} dataVersion={dataVersion} />}
           {view === 'gantt' && <GanttView projFilter={projFilter} onImport={() => setShowExcel(true)} tasks={tasks} setSelectedDate={setSelectedDate} setView={setView} refreshTasks={refreshTasks} bumpDataVersion={bumpDataVersion} />}
           {view === 'cleanup' && <TaskCleanupView tasks={tasks} setTasks={setTasks} onResume={() => setView('dashboard')} refreshTasks={refreshTasks} />}
