@@ -1647,8 +1647,11 @@ function Sidebar({ view, setView, dark, setDark, projFilter, setProjFilter, proj
         <div className={`nav-item${view === 'dashboard' ? ' active' : ''}`} onClick={() => setView('dashboard')}>
           <span className="icon">🏠</span> 대시보드
         </div>
+        <div className={`nav-item${view === 'board' ? ' active' : ''}`} onClick={() => setView('board')}>
+          <span className="icon">📋</span> Board
+        </div>
         <div className={`nav-item${view === 'briefing' ? ' active' : ''}`} onClick={() => setView('briefing')}>
-          <span className="icon">📋</span> 브리핑
+          <span className="icon">📢</span> 브리핑
         </div>
         {/* Gantt — Advanced View. 기본 메뉴에서 숨김. Board > Timeline 탭에서 접근 예정.
             활성화하려면 아래 주석을 해제:
@@ -3557,6 +3560,265 @@ function WeeklyView({ tasks, dataVersion }) {
 
 }
 
+/* ─── Board View ─── */
+function BoardView({ tasks, projects = [], refreshTasks }) {
+  const toast = useToast();
+  const [typeTab,     setTypeTab]     = useState('ALL');
+  const [projFilter,  setProjFilter]  = useState('전체');
+  const [statusFilter,setStatusFilter]= useState('open');
+  const [prioFilter,  setPrioFilter]  = useState('전체');
+  const [editingId,   setEditingId]   = useState(null);
+
+  const TYPE_TABS = [
+    { key: 'ALL',      label: '전체' },
+    { key: 'TASK',     label: '📌 Task' },
+    { key: 'WAITING',  label: '⏳ 대기' },
+    { key: 'ISSUE',    label: '⚠ 이슈' },
+    { key: 'DECISION', label: '✅ 결정' },
+    { key: 'FOLLOWUP', label: '🔁 팔로업' },
+  ];
+  const STATUS_OPTS = [
+    { key: 'open',      label: '열린 항목' },
+    { key: 'done',      label: '완료됨' },
+    { key: 'cancelled', label: '취소됨' },
+    { key: 'all',       label: '전체' },
+  ];
+
+  const filtered = tasks.filter((t) => {
+    const ty = t.type || 'TASK';
+    if (typeTab !== 'ALL' && ty !== typeTab) return false;
+    if (projFilter !== '전체' && t.project !== projFilter) return false;
+    if (statusFilter === 'open'      && !['TODO','DOING'].includes(t.status)) return false;
+    if (statusFilter === 'done'      && t.status !== 'DONE') return false;
+    if (statusFilter === 'cancelled' && t.status !== 'CANCELLED') return false;
+    if (prioFilter !== '전체' && t.priority !== prioFilter) return false;
+    return true;
+  }).sort((a, b) => {
+    const ps = { A: 1, B: 2, C: 3 };
+    const pd = (ps[a.priority] || 2) - (ps[b.priority] || 2);
+    if (pd !== 0) return pd;
+    if (a.deadline && b.deadline) return a.deadline.localeCompare(b.deadline);
+    if (a.deadline) return -1;
+    if (b.deadline) return 1;
+    return (b.updatedAt || '').localeCompare(a.updatedAt || '');
+  });
+
+  const openCount = tasks.filter((t) => {
+    const ty = t.type || 'TASK';
+    if (typeTab !== 'ALL' && ty !== typeTab) return false;
+    if (projFilter !== '전체' && t.project !== projFilter) return false;
+    return ['TODO','DOING'].includes(t.status);
+  }).length;
+
+  async function setStatus(id, status, extra = {}) {
+    try {
+      await POST(`/api/tasks/${id}/status`, { status });
+      if (extra.resolved_at) await POST(`/api/tasks/${id}/edit`, { resolved_at: extra.resolved_at });
+      await refreshTasks();
+      const labels = { DONE: '완료', DOING: '진행 시작', TODO: '대기로 변경', CANCELLED: '취소' };
+      toast(labels[status] || '상태 변경됨', { kind: 'success' });
+    } catch (e) { toast(`⚠ 오류: ${e.message}`); }
+  }
+  async function deleteItem(id) {
+    try { await POST(`/api/tasks/${id}/delete`, {}); await refreshTasks(); toast('삭제됨', { kind: 'success' }); }
+    catch (e) { toast('⚠ 삭제 실패'); }
+  }
+  async function updateItem(id, patch) {
+    try { await POST(`/api/tasks/${id}/edit`, patch); await refreshTasks(); }
+    catch (e) { toast('⚠ 수정 실패'); }
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+
+      {/* ── Type 탭 ── */}
+      <div style={{ padding: '10px 16px 0', borderBottom: '1px solid var(--border)', background: 'var(--surface)', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2 }}>
+          {TYPE_TABS.map(({ key, label }) => (
+            <button key={key} onClick={() => setTypeTab(key)} style={{
+              padding: '6px 12px', fontSize: 12, fontWeight: typeTab === key ? 700 : 400,
+              background: 'none', border: 'none', borderBottom: typeTab === key ? '2px solid var(--accent)' : '2px solid transparent',
+              cursor: 'pointer', color: typeTab === key ? 'var(--text)' : 'var(--text-3)',
+              fontFamily: 'var(--font)', borderRadius: '4px 4px 0 0', transition: 'color .12s',
+            }}>{label}</button>
+          ))}
+          <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-4)', paddingBottom: 6 }}>
+            열린 항목 {openCount}개
+          </span>
+        </div>
+      </div>
+
+      {/* ── 필터 바 ── */}
+      <div style={{ padding: '7px 16px', borderBottom: '1px solid var(--border)', background: 'var(--surface-2)', display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <span style={{ fontSize: 10, color: 'var(--text-4)', flexShrink: 0 }}>프로젝트</span>
+          {['전체', ...projects].map((p) => (
+            <div key={p} className={`filter-chip${projFilter === p ? ' active' : ''}`} onClick={() => setProjFilter(p)}>{p}</div>
+          ))}
+        </div>
+        <div style={{ width: 1, height: 14, background: 'var(--border)', flexShrink: 0 }} />
+        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <span style={{ fontSize: 10, color: 'var(--text-4)', flexShrink: 0 }}>상태</span>
+          {STATUS_OPTS.map(({ key, label }) => (
+            <div key={key} className={`filter-chip${statusFilter === key ? ' active' : ''}`} onClick={() => setStatusFilter(key)}>{label}</div>
+          ))}
+        </div>
+        <div style={{ width: 1, height: 14, background: 'var(--border)', flexShrink: 0 }} />
+        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <span style={{ fontSize: 10, color: 'var(--text-4)', flexShrink: 0 }}>우선순위</span>
+          {['전체', 'A', 'B', 'C'].map((p) => (
+            <div key={p} className={`filter-chip${prioFilter === p ? ' active' : ''}`} onClick={() => setPrioFilter(p)}>{p}</div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── 아이템 목록 ── */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 5 }}>
+        {filtered.length === 0 && (
+          <div style={{ textAlign: 'center', color: 'var(--text-4)', fontSize: 13, padding: '48px 0' }}>
+            {statusFilter === 'open' ? '열린 항목이 없습니다 🎉' : '항목이 없습니다'}
+          </div>
+        )}
+        {filtered.map((task) => (
+          <BoardItemCard key={task.id} task={task} projects={projects}
+            onStatus={setStatus} onDelete={deleteItem} onUpdate={updateItem}
+            editing={editingId === task.id}
+            onEdit={() => setEditingId(task.id)}
+            onEditDone={() => setEditingId(null)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Board Item Card ─── */
+function BoardItemCard({ task, projects = [], onStatus, onDelete, onUpdate, editing, onEdit, onEditDone }) {
+  const [draft, setDraft] = useState({ ...task });
+  const itemType = task.type || 'TASK';
+  const typeMeta = TYPE_META[itemType] || TYPE_META.TASK;
+  const dlLabel  = typeMeta.deadlineLabel;
+
+  function saveEdit() {
+    const title = (draft.title || '').trim();
+    if (!title) return;
+    onUpdate && onUpdate(task.id, {
+      title, priority: draft.priority,
+      project: draft.project || '',
+      deadline: draft.deadline || null,
+      note: (draft.note || '').trim(),
+      waiting_for: draft.waitingFor || null,
+    });
+    onEditDone && onEditDone();
+  }
+
+  /* ── 편집 모드 ── */
+  if (editing) {
+    return (
+      <div className="task-card" style={{ borderLeft: `3px solid ${draft.priority === 'A' ? 'var(--prio-a)' : draft.priority === 'B' ? 'var(--prio-b)' : 'var(--border-2)'}`, background: 'var(--surface-2)' }}>
+        <input autoFocus value={draft.title || ''} onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); saveEdit(); } if (e.key === 'Escape') { setDraft({ ...task }); onEditDone(); } }}
+          style={{ width: '100%', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '4px 6px', fontSize: 13, fontFamily: 'var(--font)', color: 'var(--text)', background: 'var(--surface)', outline: 'none', fontWeight: 600 }} />
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6, alignItems: 'center' }}>
+          <div className="prio-btns">
+            {['A', 'B', 'C'].map((p) => (
+              <button key={p} className={`prio-btn${draft.priority === p ? ` sel-${p.toLowerCase()}` : ''}`} onClick={() => setDraft({ ...draft, priority: p })}>{p}</button>
+            ))}
+          </div>
+          <select value={draft.project || ''} onChange={(e) => setDraft({ ...draft, project: e.target.value })}
+            style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '2px 6px', fontSize: 11, background: 'var(--surface)', color: 'var(--text)', fontFamily: 'var(--font)', cursor: 'pointer' }}>
+            <option value="">📁 프로젝트</option>
+            {projects.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+          <input type="date" value={draft.deadline || ''} onChange={(e) => setDraft({ ...draft, deadline: e.target.value })}
+            style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '2px 5px', fontSize: 11, background: 'var(--surface)', color: 'var(--text)', fontFamily: 'var(--font)', cursor: 'pointer' }} />
+          {(itemType === 'WAITING' || itemType === 'FOLLOWUP') && (
+            <input value={draft.waitingFor || ''} onChange={(e) => setDraft({ ...draft, waitingFor: e.target.value })}
+              placeholder="@대상자" style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '2px 6px', fontSize: 11, background: 'var(--surface)', color: 'var(--text)', fontFamily: 'var(--font)', width: 84 }} />
+          )}
+        </div>
+        {/* 메모 */}
+        <textarea value={draft.note || ''} onChange={(e) => setDraft({ ...draft, note: e.target.value })}
+          placeholder="메모..." style={{ width: '100%', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '4px 6px', fontSize: 11, fontFamily: 'var(--font)', color: 'var(--text-2)', background: 'var(--surface)', outline: 'none', resize: 'vertical', minHeight: 32, marginTop: 6 }} />
+        <div className="task-card-actions" style={{ marginTop: 6 }}>
+          <button className="icon-btn done" onClick={saveEdit}>✓ 저장</button>
+          <button className="icon-btn" onClick={() => { setDraft({ ...task }); onEditDone(); }}>취소</button>
+          <span style={{ marginLeft: 'auto', fontSize: 9, color: 'var(--text-4)' }}>⏎ 저장 · Esc 취소</span>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── 읽기 모드 ── */
+  const statusDotColor = { TODO: 'var(--text-4)', DOING: 'var(--accent)', DONE: 'var(--green)', CANCELLED: 'var(--border-2)' }[task.status] || 'var(--text-4)';
+  const isDone       = task.status === 'DONE';
+  const isCancelled  = task.status === 'CANCELLED';
+
+  return (
+    <div className="task-card" style={{ borderLeft: `3px solid ${task.priority === 'A' ? 'var(--prio-a)' : task.priority === 'B' ? 'var(--prio-b)' : 'var(--border-2)'}`, opacity: (isDone || isCancelled) ? 0.72 : 1 }}>
+      <div className="task-card-top">
+        <div style={{ flex: 1, cursor: 'text' }} onDoubleClick={onEdit} title="더블클릭해서 편집">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span title={task.status} style={{ width: 7, height: 7, borderRadius: '50%', background: statusDotColor, flexShrink: 0, marginTop: 1, display: 'inline-block' }} />
+            <div className="task-card-title" style={{ textDecoration: isCancelled ? 'line-through' : 'none', color: (isDone || isCancelled) ? 'var(--text-3)' : 'var(--text)' }}>
+              {task.title}
+            </div>
+          </div>
+          <div className="task-card-meta" style={{ marginTop: 4, paddingLeft: 13 }}>
+            {/* type badge — TASK는 생략 */}
+            {itemType !== 'TASK' && (
+              <span className={`badge-type ${typeMeta.cls}`}>{typeMeta.icon} {typeMeta.label}</span>
+            )}
+            <span className={`badge-prio-${task.priority.toLowerCase()}`}>{task.priority}</span>
+            {task.project && <span style={{ fontSize: 10, color: 'var(--text-4)' }}>📁 {task.project}</span>}
+            {task.waitingFor && <span style={{ fontSize: 10, color: 'var(--text-3)' }}>👤 {task.waitingFor}</span>}
+            {task.deadline && (
+              <span style={{ fontSize: 10, color: isUrgent(task.deadline) && !isDone ? 'var(--red)' : 'var(--text-4)' }}>
+                {dlLabel} {fmt(task.deadline)}{isToday(task.deadline) && !isDone ? ' (오늘!)' : ''}
+              </span>
+            )}
+            {task.status === 'DOING' && <span style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 600 }}>▶ 진행중</span>}
+          </div>
+          {task.note && <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4, paddingLeft: 13 }}>📌 {task.note}</div>}
+        </div>
+      </div>
+
+      <div className="task-card-actions">
+        {/* ── 타입별 주요 액션 ── */}
+        {itemType === 'TASK' && !isDone && !isCancelled && <>
+          <button className="icon-btn done" onClick={() => onStatus(task.id, 'DONE')}>✓ 완료</button>
+          <button className="icon-btn" onClick={() => onStatus(task.id, task.status === 'DOING' ? 'TODO' : 'DOING')}>
+            {task.status === 'DOING' ? '⏸ 대기' : '▶ 시작'}
+          </button>
+        </>}
+
+        {itemType === 'WAITING' && !isDone && !isCancelled && <>
+          <button className="icon-btn done" onClick={() => onStatus(task.id, 'DONE')}>✓ 회신받음</button>
+          {/* TODO: [팔로업으로 전환] — Inbox 2단계에서 구현 */}
+        </>}
+
+        {itemType === 'ISSUE' && !isDone && !isCancelled && <>
+          <button className="icon-btn done" onClick={() => onStatus(task.id, 'DONE', { resolved_at: new Date().toISOString().slice(0, 10) })}>🔧 해결</button>
+          {task.status !== 'DOING' && (
+            <button className="icon-btn" onClick={() => onStatus(task.id, 'DOING')}>▶ 진행</button>
+          )}
+        </>}
+
+        {itemType === 'FOLLOWUP' && !isDone && !isCancelled && <>
+          <button className="icon-btn done" onClick={() => onStatus(task.id, 'DONE')}>✓ 완료</button>
+          <button className="icon-btn" onClick={onEdit} title="날짜 수정">📅 연기</button>
+        </>}
+
+        {/* DECISION: 기록성 항목 — 편집/삭제 중심. TODO: 관련 Task 만들기 (Inbox 2단계) */}
+
+        {/* 공통 */}
+        <button className="icon-btn" onClick={onEdit}>✏️ 편집</button>
+        <button className="icon-btn" style={{ marginLeft: 'auto', color: 'var(--red)', borderColor: 'transparent' }} onClick={() => onDelete(task.id)} title="삭제">✕</button>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Task 정리 View ─── */
 function TaskCleanupView({ tasks, setTasks, onResume, refreshTasks }) {
   const toast = useToast();
@@ -4195,9 +4457,16 @@ function App() {
               <span className="badge badge-blue">DOING {doingCount}/5</span>
             </div>
           </>}
+          {view === 'board' && <>
+            <div>
+              <div className="header-title">📋 Board</div>
+              <div className="header-sub">Work Item 전체 현황</div>
+            </div>
+            <div style={{ marginLeft: 'auto' }} />
+          </>}
           {view === 'briefing' && <>
             <div>
-              <div className="header-title">📋 브리핑</div>
+              <div className="header-title">📢 브리핑</div>
               <div className="header-sub">{formatKoreanDate(today)}</div>
             </div>
             <div style={{ marginLeft: 'auto' }} />
@@ -4219,6 +4488,7 @@ function App() {
         </div>
         <div className="main-body">
           {view === 'dashboard' && <Dashboard tasks={tasks} setTasks={setTasks} projFilter={projFilter} projects={projects} selectedDate={selectedDate} setSelectedDate={setSelectedDate} refreshTasks={refreshTasks} dataVersion={dataVersion} bumpDataVersion={bumpDataVersion} journalDates={journalDates} refreshJournalDates={refreshJournalDates} />}
+          {view === 'board' && <BoardView tasks={tasks} projects={projects} refreshTasks={refreshTasks} />}
           {view === 'briefing' && <BriefingView tasks={tasks} dataVersion={dataVersion} />}
           {view === 'gantt' && <GanttView projFilter={projFilter} onImport={() => setShowExcel(true)} tasks={tasks} setSelectedDate={setSelectedDate} setView={setView} refreshTasks={refreshTasks} bumpDataVersion={bumpDataVersion} />}
           {view === 'cleanup' && <TaskCleanupView tasks={tasks} setTasks={setTasks} onResume={() => setView('dashboard')} refreshTasks={refreshTasks} />}
