@@ -526,6 +526,35 @@ body {
 [data-voice="terminal"] .badge-prio-a::before { content: '[A] '; }
 [data-voice="terminal"] .badge-prio-b::before { content: '[B] '; }
 [data-voice="terminal"] .badge-prio-c::before { content: '[C] '; }
+
+/* ── TopRibbon (Toss풍) ── */
+@keyframes ribbonPop { from { opacity: 0; transform: translateY(-6px) scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes ribbonBubble { 0% { transform: scale(.7) rotate(-8deg); opacity: 0; } 60% { transform: scale(1.08) rotate(3deg); } 100% { transform: scale(1) rotate(0); opacity: 1; } }
+.ribbon-card { animation: ribbonPop .42s cubic-bezier(.22,1,.36,1); }
+.ribbon-bubble { animation: ribbonBubble .5s cubic-bezier(.22,1.4,.4,1) .04s both; }
+.ribbon-ghost { transition: background .14s, color .14s; }
+.ribbon-ghost:hover { background: rgba(127,127,127,.14); color: var(--text-2); }
+/* ── 버튼 눌림 마이크로 인터랙션 (Toss풍) ── */
+.btn { transition: background .12s, border-color .12s, transform .09s ease; }
+.btn:active { transform: scale(.97); }
+.icon-btn { transition: background .12s, color .12s, transform .09s ease; }
+.icon-btn:active { transform: scale(.94); }
+.filter-chip { transition: background .12s, color .12s, border-color .12s, transform .09s ease; }
+.filter-chip:active { transform: scale(.96); }
+/* ── 카드 시스템 통일 (Toss풍: 둥근 모서리·소프트 섀도우·hover 부상) ── */
+.task-card { border-radius: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.04); transition: box-shadow .16s ease, transform .12s ease, border-color .12s; }
+.task-card:hover { box-shadow: 0 8px 22px rgba(0,0,0,.09); transform: translateY(-1px); }
+/* ── 숫자 강조 ── */
+.stat-num { font-size: 26px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.stat-card { border-radius: 10px; }
+/* ── 탭 전환 모션 ── */
+@keyframes viewIn { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } }
+.view-anim { animation: viewIn .22s cubic-bezier(.22,1,.36,1); }
+/* ── 빈 상태 (일러스트풍 이모지 + 가벼운 카피) ── */
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 52px 20px; text-align: center; animation: viewIn .3s ease; }
+.empty-state .es-emoji { font-size: 42px; line-height: 1; margin-bottom: 4px; }
+.empty-state .es-title { font-size: 14px; font-weight: 700; color: var(--text-2); }
+.empty-state .es-sub { font-size: 12px; color: var(--text-4); }
 </style>
 </head>
 <body>
@@ -1186,6 +1215,80 @@ function filterSlashCmds(q) {
   return SLASH_CMDS.filter((c) => c.id.startsWith(query) || c.kw.toLowerCase().includes(query) || c.label.toLowerCase().includes(query));
 }
 
+/* ── 라이브 하이라이트 에디터 ──
+   투명 textarea + 그 아래 정렬된 오버레이(같은 폰트/메트릭, 색만 변경 → 캐럿 정렬 유지, 한글 IME 안전).
+   편집 중에도 제목·태그·체크박스·인용이 즉시 스타일되어 "치는 대로 예쁘게" 보임. */
+function hlInline(text, kb) {
+  if (!text) return text;
+  const out = [];let last = 0, k = 0, m;
+  const re = /(\*\*[^*\n]+\*\*)|(\[\[[^\]\n]+\]\])|(`[^`\n]+`)|(#[^\s#.,!?;:()\[\]]+)/g;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    const tok = m[0];
+    if (m[1]) {const inner = tok.slice(2, -2);out.push(<span key={kb + (k++)}><span style={{ color: 'var(--text-4)' }}>**</span><span style={{ color: 'var(--text)' }}>{inner}</span><span style={{ color: 'var(--text-4)' }}>**</span></span>);}
+    else if (m[2]) out.push(<span key={kb + (k++)} style={{ color: 'var(--accent-text)' }}>{tok}</span>);
+    else if (m[3]) out.push(<span key={kb + (k++)} style={{ color: 'var(--accent-text)' }}>{tok}</span>);
+    else out.push(<span key={kb + (k++)} style={{ color: 'var(--accent-text)' }}>{tok}</span>);
+    last = m.index + tok.length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+function hlLine(line, li) {
+  let m = line.match(/^(\s*)(#{1,6})(\s+)(.*)$/);
+  if (m) return [<span key="a" style={{ color: 'var(--text-4)' }}>{m[1] + m[2] + m[3]}</span>, <span key="b" style={{ color: 'var(--accent-text)' }}>{hlInline(m[4], 'h' + li)}</span>];
+  m = line.match(/^(\s*)([-*])(\s+)(\[[ xX]\])(\s+)(.*)$/);
+  if (m) {const done = /[xX]/.test(m[4]);return [<span key="a" style={{ color: 'var(--text-4)' }}>{m[1] + m[2] + m[3]}</span>, <span key="b" style={{ color: done ? 'var(--green)' : 'var(--accent-text)' }}>{m[4]}</span>, m[5], <span key="c" style={done ? { color: 'var(--text-4)', textDecoration: 'line-through' } : undefined}>{hlInline(m[6], 'c' + li)}</span>];}
+  m = line.match(/^(\s*)([-*])(\s+)(.*)$/);
+  if (m) return [<span key="a" style={{ color: 'var(--text-4)' }}>{m[1] + m[2] + m[3]}</span>, <React.Fragment key="b">{hlInline(m[4], 'b' + li)}</React.Fragment>];
+  m = line.match(/^(\s*)(>)(\s*)(\[!\w+\])?(.*)$/);
+  if (m) return [<span key="a" style={{ color: 'var(--text-4)' }}>{m[1] + m[2] + m[3]}</span>, m[4] ? <span key="b" style={{ color: 'var(--accent-text)' }}>{m[4]}</span> : null, <React.Fragment key="c">{hlInline(m[5] || '', 'q' + li)}</React.Fragment>];
+  if (/^\s*---+\s*$/.test(line)) return <span style={{ color: 'var(--text-4)' }}>{line}</span>;
+  return hlInline(line, 'p' + li);
+}
+function renderHighlight(text) {
+  const lines = (text || '').split('\n');
+  const nodes = [];
+  lines.forEach((line, li) => {
+    nodes.push(<React.Fragment key={'L' + li}>{hlLine(line, li)}</React.Fragment>);
+    if (li < lines.length - 1) nodes.push('\n');
+  });
+  nodes.push('\u200b');
+  return nodes;
+}
+function HighlightedTextarea({ taRef, value, onChange, onKeyDown, onBlur, placeholder, rows, isPreamble }) {
+  const overlayRef = React.useRef(null);
+  const minH = isPreamble ? 40 : 48;
+  const metrics = {
+    width: '100%', margin: 0,
+    padding: isPreamble ? '4px 4px 8px' : '2px 4px 8px 26px',
+    fontFamily: 'var(--font)', fontSize: 13, lineHeight: 1.85,
+    border: 'none', outline: 'none', boxSizing: 'border-box',
+    whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'break-word',
+    letterSpacing: 'normal', textAlign: 'left'
+  };
+  function syncScroll() {
+    if (overlayRef.current && taRef.current) {overlayRef.current.scrollTop = taRef.current.scrollTop;}
+  }
+  return (
+    <div style={{ position: 'relative', background: 'var(--surface-2)', borderRadius: 4, minHeight: minH }}>
+      <div ref={overlayRef} aria-hidden="true" style={{ ...metrics, position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1, pointerEvents: 'none', overflow: 'hidden', color: 'var(--text)', minHeight: minH }}>
+        {renderHighlight(value)}
+      </div>
+      <textarea
+        ref={taRef}
+        value={value}
+        onChange={onChange}
+        onKeyDown={onKeyDown}
+        onBlur={onBlur}
+        onScroll={syncScroll}
+        placeholder={placeholder}
+        rows={rows}
+        spellCheck={false}
+        style={{ ...metrics, position: 'relative', zIndex: 2, display: 'block', resize: 'vertical', minHeight: minH, background: 'transparent', color: 'transparent', caretColor: 'var(--text)' }} />
+    </div>);
+}
+
 function JournalFoldView({ text, onChange, dateKey, onSlashTask, isToday, onJumpDate }) {
   const sections = React.useMemo(() => parseSections(text), [text]);
   const [editingIdx, setEditingIdx] = React.useState(null); // 현재 편집 중인 섹션 (body)
@@ -1481,6 +1584,22 @@ function JournalFoldView({ text, onChange, dateKey, onSlashTask, isToday, onJump
     setFolded(all);
   }
 
+  /* 섹션 점프 칩 — 그 섹션만 열고 나머지는 접기. 이미 그 섹션만 열려 있으면 다시 눌러 접기(토글) */
+  function openOnlySection(realIdx) {
+    const target = sections[realIdx];
+    if (!target || target.header === null) return;
+    const tkey = sectionFoldKey(target);
+    const headerKeys = sections.filter((s) => s.header !== null).map(sectionFoldKey);
+    const isOnlyOpen = !folded.has(tkey) && headerKeys.every((k) => k === tkey || folded.has(k));
+    const next = new Set();
+    if (isOnlyOpen) {
+      headerKeys.forEach((k) => next.add(k)); // 전부 접기
+    } else {
+      headerKeys.forEach((k) => {if (k !== tkey) next.add(k);}); // 이 섹션만 열기
+    }
+    setFolded(next);
+  }
+
   const hasHeaders = sections.some((s) => s.header !== null);
 
   return (
@@ -1499,19 +1618,18 @@ function JournalFoldView({ text, onChange, dateKey, onSlashTask, isToday, onJump
           <span style={{ color: 'var(--text-4)' }}>
             섹션 {sections.filter((s) => s.header !== null).length}개{folded.size > 0 ? ` · ${folded.size}개 접힘` : ''}
           </span>
-          {/* 섹션 점프 네비게이션 */}
+          {/* 섹션 점프 칩 — 누르면 그 섹션만 열고 나머지는 접힘 · 다시 누르면 접기 */}
           {sections.filter(s => s.header !== null).map((s, si) => {
             const realIdx = sections.indexOf(s);
+            const tkey = sectionFoldKey(s);
+            const headerKeys = sections.filter(x => x.header !== null).map(sectionFoldKey);
+            const isOnlyOpen = !folded.has(tkey) && headerKeys.every(k => k === tkey || folded.has(k));
             return (
               <button key={si} className="btn btn-sm"
-                title={`이동: ${s.header}`}
-                onClick={() => {
-                  if (folded.has(sectionFoldKey(s))) toggle(realIdx);
-                  const els = document.querySelectorAll('[data-section-idx]');
-                  const el = [...els].find(e => e.dataset.sectionIdx === String(realIdx));
-                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }}
-                style={{ maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                title={isOnlyOpen ? `접기: ${s.header.replace(/^#+\s*/, '')}` : `이 섹션만 열기: ${s.header.replace(/^#+\s*/, '')}`}
+                onClick={() => openOnlySection(realIdx)}
+                style={{ maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  ...(isOnlyOpen ? { background: 'var(--accent-light)', color: 'var(--accent-text)', borderColor: 'var(--accent)', fontWeight: 600 } : {}) }}>
                 {s.header.replace(/^#+\s*/, '').slice(0, 10) || '섹션'}
               </button>
             );
@@ -1567,22 +1685,15 @@ function JournalFoldView({ text, onChange, dateKey, onSlashTask, isToday, onJump
             {/* 본문 — 접혔을 때 숨김. 편집 중이면 textarea, 아니면 렌더링 */}
             {!isFolded && (isEditing ?
             <div style={{ position: 'relative' }}>
-              <textarea
-                ref={editRef}
+              <HighlightedTextarea
+                taRef={editRef}
                 value={s.body}
                 onChange={(e) => {updateBody(i, e.target.value);detectSlash(i, e.target);}}
                 onKeyDown={(e) => bodyKeyDown(e, i)}
                 onBlur={() => {setEditingIdx(null);setSlash(null);setMenu(null);}}
                 placeholder={isPreamble ? '(헤더 위 본문) — /task 제목 으로 Task 생성' : '내용… — /task 제목 으로 Task 생성'}
                 rows={Math.max(2, Math.min(24, bodyLines + 1))}
-                spellCheck={false}
-                style={{
-                  width: '100%', border: 'none', outline: 'none',
-                  padding: isPreamble ? '4px 4px 8px' : '2px 4px 8px 26px',
-                  fontFamily: 'var(--mono)', fontSize: 13,
-                  color: 'var(--text)', background: 'var(--surface-2)', resize: 'vertical',
-                  lineHeight: 1.8, minHeight: isPreamble ? 40 : 48, display: 'block', borderRadius: 4
-                }} />
+                isPreamble={isPreamble} />
                 {slash && slash.idx === i && (() => {
                   // 커서 줄 바로 아래에 힌트 박스 표시
                   const hintTop = ((slash.lineRow || 0) + 1) * 24 + 4;
@@ -2153,6 +2264,9 @@ function Sidebar({ view, setView, dark, setDark, projFilter, setProjFilter, proj
         </div>
         <div className={`nav-item${view === 'review' ? ' active' : ''}`} onClick={() => setView('review')}>
           <span className="icon">🔍</span> Review
+        </div>
+        <div className={`nav-item${view === 'calendar' ? ' active' : ''}`} onClick={() => setView('calendar')}>
+          <span className="icon">🗓</span> 캘린더
         </div>
         <div className={`nav-item`} onClick={() => setShowSearch(true)}>
           <span className="icon">🔎</span> Search
@@ -4819,8 +4933,10 @@ function BoardView({ tasks, projects = [], refreshTasks }) {
       {/* ── 아이템 목록 ── */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 5 }}>
         {filtered.length === 0 && (
-          <div style={{ textAlign: 'center', color: 'var(--text-4)', fontSize: 13, padding: '48px 0' }}>
-            {statusFilter === 'open' ? '열린 항목이 없습니다 🎉' : '항목이 없습니다'}
+          <div className="empty-state">
+            <div className="es-emoji">{statusFilter === 'open' ? '🎉' : '🗃️'}</div>
+            <div className="es-title">{statusFilter === 'open' ? '열린 항목이 없어요' : '표시할 항목이 없어요'}</div>
+            <div className="es-sub">{statusFilter === 'open' ? '다 비웠네요. 오늘은 여기까지! 👏' : '필터를 바꾸면 다른 항목을 볼 수 있어요.'}</div>
           </div>
         )}
         {filtered.map((task) => (
@@ -5070,8 +5186,10 @@ function InboxView({ tasks, projects = [], refreshTasks }) {
       {/* ── 아이템 목록 ── */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 5 }}>
         {filtered.length === 0 && (
-          <div style={{ textAlign: 'center', color: 'var(--text-4)', fontSize: 13, padding: '48px 0' }}>
-            이 범주에 항목이 없습니다 ✨
+          <div className="empty-state">
+            <div className="es-emoji">✨</div>
+            <div className="es-title">이 범주는 깔끈해요</div>
+            <div className="es-sub">처리할 항목이 없어요. 잘하고 있어요!</div>
           </div>
         )}
         {filtered.map((task) => (
@@ -5230,6 +5348,220 @@ function ReviewView({ tasks, setTasks, dataVersion, refreshTasks, onGoToday }) {
   );
 }
 
+
+/* ─── 캘린더 View (마감 예정 + 완료를 한 달력에) ───
+   "해야 할" 항목(마감일 기준)과 "처리한" 항목(완료일 기준)을 한 눈에. 날짜 클릭 → 그 날 일지로. */
+function CalendarView({ tasks = [], projFilter = '전체', setSelectedDate, setView }) {
+  const today = new Date(TODAY + 'T00:00:00');
+  const [viewYear, setViewYear] = useState(today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(today.getMonth());
+  const [mode, setMode] = useState('all');
+
+  const inProj = (t) => projFilter === '전체' || t.project === projFilter;
+  const dueMap = {}, doneMap = {};
+  tasks.forEach((t) => {
+    if (!inProj(t)) return;
+    if (t.deadline && !['DONE', 'CANCELLED'].includes(t.status)) {(dueMap[t.deadline] = dueMap[t.deadline] || []).push(t);}
+    if (t.status === 'DONE' && t.updatedAt) {(doneMap[t.updatedAt] = doneMap[t.updatedAt] || []).push(t);}
+  });
+
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const startOffset = new Date(viewYear, viewMonth, 1).getDay();
+  const cells = [];
+  for (let i = 0; i < startOffset; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
+  const weeks = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+
+  const ymd = (d) => `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  const DOW = ['일', '월', '화', '수', '목', '금', '토'];
+  let monthDue = 0, monthDone = 0;
+  for (let d = 1; d <= daysInMonth; d++) {monthDue += (dueMap[ymd(d)] || []).length;monthDone += (doneMap[ymd(d)] || []).length;}
+
+  const prev = () => {if (viewMonth === 0) {setViewYear((y) => y - 1);setViewMonth(11);} else setViewMonth((m) => m - 1);};
+  const next = () => {if (viewMonth === 11) {setViewYear((y) => y + 1);setViewMonth(0);} else setViewMonth((m) => m + 1);};
+  const goToday = () => {setViewYear(today.getFullYear());setViewMonth(today.getMonth());};
+  const prioColor = (p) => p === 'A' ? 'var(--prio-a)' : p === 'B' ? 'var(--prio-b)' : 'var(--prio-c)';
+
+  function Item({ t, done }) {
+    return (
+      <div title={`${done ? '✓ 완료' : '마감'} · ${t.title}${t.project ? ' · ' + t.project : ''}`}
+        style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '1px 4px', borderRadius: 3, fontSize: 11, lineHeight: 1.5, background: done ? 'var(--green-light)' : 'var(--surface-2)', minWidth: 0 }}>
+        {done ?
+        <span style={{ color: 'var(--green)', fontSize: 10, flexShrink: 0 }}>✓</span> :
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: PROJ_COLORS[t.project] || 'var(--text-3)', flexShrink: 0 }} />}
+        <span style={{ flex: 1, minWidth: 0, color: done ? 'var(--text-4)' : 'var(--text-2)', textDecoration: done ? 'line-through' : 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.title}</span>
+      </div>);
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 18px', borderBottom: '1px solid var(--border)', flexShrink: 0, background: 'var(--surface)' }}>
+        <button className="btn btn-sm" onClick={prev}>‹</button>
+        <span style={{ fontSize: 15, fontWeight: 700, minWidth: 110, textAlign: 'center' }}>{viewYear}년 {viewMonth + 1}월</span>
+        <button className="btn btn-sm" onClick={next}>›</button>
+        <button className="btn btn-sm" onClick={goToday}>오늘</button>
+        <div style={{ display: 'flex', gap: 4, marginLeft: 10 }}>
+          {[['all', '전체'], ['due', '해야 할 일'], ['done', '완료']].map(([k, l]) =>
+          <div key={k} className={`filter-chip${mode === k ? ' active' : ''}`} onClick={() => setMode(k)}>{l}</div>
+          )}
+        </div>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 16, fontSize: 12, color: 'var(--text-3)' }}>
+          <span>이번 달 해야 할 일 <strong style={{ color: 'var(--text)' }}>{monthDue}</strong></span>
+          <span>완료 <strong style={{ color: 'var(--green)' }}>{monthDone}</strong></span>
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+        {DOW.map((d, i) =>
+        <div key={d} style={{ padding: '6px 10px', fontSize: 11, fontWeight: 600, color: i === 0 ? 'var(--red)' : i === 6 ? 'var(--blue)' : 'var(--text-3)' }}>{d}</div>
+        )}
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gridAutoRows: '1fr' }}>
+        {weeks.map((row, wi) =>
+        row.map((d, di) => {
+          if (!d) return <div key={`e${wi}-${di}`} style={{ borderRight: '1px solid var(--border)', borderBottom: '1px solid var(--border)', background: 'var(--surface-2)', opacity: .4 }} />;
+          const ds = ymd(d);
+          const isToday = ds === TODAY;
+          const due = mode === 'done' ? [] : dueMap[ds] || [];
+          const done = mode === 'due' ? [] : doneMap[ds] || [];
+          const items = [...due.map((t) => ({ t, done: false })), ...done.map((t) => ({ t, done: true }))];
+          const shown = items.slice(0, 4);
+          const isWeekend = di === 0 || di === 6;
+          return (
+            <div key={ds}
+              onClick={() => {setSelectedDate(ds);setView('today');}}
+              title={`${ds} — 클릭하면 이 날 일지로 이동`}
+              style={{ minHeight: 96, borderRight: '1px solid var(--border)', borderBottom: '1px solid var(--border)', padding: '5px 6px', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 3, background: isToday ? 'var(--accent-light)' : isWeekend ? 'var(--surface-2)' : 'var(--surface)' }}
+              onMouseEnter={(e) => {if (!isToday) e.currentTarget.style.background = 'var(--surface-2)';}}
+              onMouseLeave={(e) => {if (!isToday) e.currentTarget.style.background = isWeekend ? 'var(--surface-2)' : 'var(--surface)';}}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ fontSize: 12, fontWeight: isToday ? 700 : 500, color: isToday ? 'var(--accent-text)' : di === 0 ? 'var(--red)' : 'var(--text-2)', width: 20, height: 20, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', background: isToday ? 'var(--surface)' : 'transparent' }}>{d}</span>
+                {due.length > 0 && <span style={{ fontSize: 9, color: 'var(--text-4)' }}>마감 {due.length}</span>}
+                {done.length > 0 && <span style={{ fontSize: 9, color: 'var(--green)', marginLeft: 'auto' }}>✓{done.length}</span>}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                {shown.map(({ t, done }, k) => <Item key={k} t={t} done={done} />)}
+                {items.length > shown.length && <div style={{ fontSize: 10, color: 'var(--text-4)', paddingLeft: 4 }}>+{items.length - shown.length}개 더</div>}
+              </div>
+            </div>);
+        })
+        )}
+      </div>
+      <div style={{ display: 'flex', gap: 14, alignItems: 'center', padding: '7px 18px', borderTop: '1px solid var(--border)', flexShrink: 0, background: 'var(--surface)', fontSize: 11, color: 'var(--text-3)', flexWrap: 'wrap' }}>
+        <span style={{ color: 'var(--text-4)' }}>마감 예정:</span>
+        {Object.entries(PROJ_COLORS).filter(([k]) => k !== '전체').map(([name, color]) =>
+        <span key={name} style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: color }} /> {name}</span>
+        )}
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ color: 'var(--green)' }}>✓</span> 완료한 일</span>
+        <span style={{ marginLeft: 'auto', color: 'var(--text-4)' }}>날짜 클릭 → 그 날 일지로 이동</span>
+      </div>
+    </div>);
+}
+
+/* ─── 상단 공통 라인 (TopRibbon) ─── 탭과 무관하게 항상 위에 한 줄 */
+const RIBBON_ITEMS = [
+{ tag: '오늘의 한 줄', icon: '🌱', text: '작은 진전도 진전이에요. 오늘 딱 한 칸만 옮겨봐요.' },
+{ tag: '집중 팁', icon: '🎯', text: '집중은 “무엇을 안 할지”를 정하는 데서 시작돼요.' },
+{ tag: '워크로그 라운지', icon: '🍵', text: '2분 안에 끝낼 일은 미루지 말고 바로 — 미루는 비용이 더 커요.' },
+{ tag: '오늘의 한 줄', icon: '🧭', text: '바쁜 것과 중요한 것은 다른 일. 오늘의 A를 먼저.' },
+{ tag: '회고', icon: '🪞', text: '하루 끝에 한 줄만 적어도 내일의 나에게 큰 단서가 돼요.' },
+{ tag: '집중 팁', icon: '🧱', text: '큰 일은 첫 5분만. 시작이 가장 무겁고, 그다음은 가벼워요.' },
+{ tag: '워크로그 라운지', icon: '☕', text: '딥워크 25분 + 휴식 5분. 타이머는 의외로 정직한 동료예요.' },
+{ tag: '오늘의 한 줄', icon: '📮', text: '완벽한 보고서보다, 오늘 보낸 초안이 일을 굴려요.' },
+{ tag: '정리', icon: '🧹', text: '방치된 항목은 마음의 탭. 완료/취소로 닫으면 머리가 가벼워져요.' },
+{ tag: '집중 팁', icon: '🔕', text: '알림을 끄는 30분이, 켜둔 3시간보다 멀리 가요.' },
+{ tag: '워크로그 라운지', icon: '🌗', text: '에너지가 높은 시간대에 어려운 일을, 낮은 시간대에 잔업을.' },
+{ tag: '회고', icon: '✅', text: '“오늘 가장 잘한 일 한 가지”를 떠올려보세요. 그게 내일의 기준이에요.' },
+{ tag: '오늘의 한 줄', icon: '🪁', text: '계획은 바람을 타는 연 같아요. 흔들려도 줄만 쥐고 있으면 돼요.' },
+{ tag: '집중 팁', icon: '📦', text: '비슷한 일은 묶어서 한 번에 — 맥락 전환이 가장 비싼 비용이에요.' },
+{ tag: '워크로그 라운지', icon: '🌙', text: '퇴근 전 내일 할 일 3개만 적어두면, 아침의 나가 고마워해요.' },
+{ tag: '회고', icon: '🌤', text: '안 풀리는 날도 기록은 남아요. 흐린 날의 데이터가 맑은 날을 만들어요.' },
+{ tag: '스탠드업', icon: '🌅', text: '어제의 나에게 — 가장 잘 끝낸 한 가지는 무엇이었나요?' },
+{ tag: '스탠드업', icon: '🎯', text: '오늘 단 하나만 끝낸다면, 그건 무엇일까요?' },
+{ tag: '스탠드업', icon: '🚧', text: '지금 막혀 있는 일은 없나요? 있으면 일지에 한 줄 적어두기.' },
+{ tag: '스탠드업', icon: '🤝', text: '오늘 누군가에게 도움받고 싶은 일, 하나 떠오르나요?' },
+{ tag: '스탠드업', icon: '🌡', text: '이번 주 만족도를 1~5점으로 매긴다면 지금 몇 점인가요?' },
+{ tag: '단축키', icon: '⌨️', text: '⌘K(Ctrl+K) 누르면 어디서든 일지·할 일 검색이 열려요.' },
+{ tag: '단축키', icon: '⚡', text: '일지에서 /task 라고 치면 그 줄이 바로 할 일이 돼요.' },
+{ tag: '단축키', icon: '🏷', text: '#태그를 붙여두면 나중에 검색·모아보기가 훨씬 쉬워요.' },
+{ tag: '단축키', icon: '🔗', text: '[[2026-06-10]] 처럼 쓰면 그 날 일지로 바로 점프해요.' },
+{ tag: '단축키', icon: '🗂', text: 'Board에서 대기·이슈·결정·팔로업으로 항목을 분류해보세요.' }];
+
+const RIBBON_THEMES = {
+  '오늘의 한 줄': { grad: 'linear-gradient(135deg,#6366f1,#8b5cf6)', tint: 'rgba(99,102,241,.12)' },
+  '집중 팁': { grad: 'linear-gradient(135deg,#3b82f6,#06b6d4)', tint: 'rgba(37,99,235,.12)' },
+  '워크로그 라운지': { grad: 'linear-gradient(135deg,#f59e0b,#f97316)', tint: 'rgba(245,158,11,.14)' },
+  '회고': { grad: 'linear-gradient(135deg,#10b981,#14b8a6)', tint: 'rgba(16,185,129,.12)' },
+  '스탠드업': { grad: 'linear-gradient(135deg,#14b8a6,#0ea5e9)', tint: 'rgba(14,165,233,.12)' },
+  '단축키': { grad: 'linear-gradient(135deg,#64748b,#334155)', tint: 'rgba(100,116,139,.12)' },
+  '오늘의 나': { grad: 'linear-gradient(135deg,#f43f5e,#f59e0b)', tint: 'rgba(244,63,94,.12)' },
+  '정리': { grad: 'linear-gradient(135deg,#ec4899,#f43f5e)', tint: 'rgba(236,72,153,.12)' }
+};
+function TopRibbon({ tasks = [] }) {
+  const [collapsed, setCollapsed] = useState(() => {
+    try {return localStorage.getItem('worklog.ribbon.collapsed') === '1' || sessionStorage.getItem('worklog.ribbon.hidden') === '1';} catch (e) {return false;}
+  });
+  const setCol = (v) => {setCollapsed(v);try {localStorage.setItem('worklog.ribbon.collapsed', v ? '1' : '0');sessionStorage.removeItem('worklog.ribbon.hidden');} catch (e) {}};
+  const [idx, setIdx] = useState(0);
+  if (collapsed) return (
+    <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '6px 16px 0', flexShrink: 0 }}>
+      <button className="ribbon-ghost" onClick={() => setCol(false)} title="오늘의 한 줄 다시 보기"
+        style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 99, padding: '3px 11px', cursor: 'pointer', fontSize: 11, color: 'var(--text-3)' }}>
+        💬 오늘의 한 줄 보기
+      </button>
+    </div>);
+  /* 내 데이터 기반 넓지 (Toss풍 개인화 한 줄) — 의미 있을 때만 생성 */
+  const nudges = (() => {
+    const out = [];
+    const since = (d) => d ? Math.floor((new Date(TODAY) - new Date(d + 'T00:00:00')) / 86400000) : 0;
+    const ymd = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+    const doneToday = tasks.filter((t) => t.status === 'DONE' && t.updatedAt === TODAY).length;
+    if (doneToday > 0) out.push({ tag: '오늘의 나', icon: '🎉', text: `오늘 벌써 ${doneToday}개 완료했어요. 이 흐름 좋아요!` });
+    const todayDue = tasks.filter((t) => !['DONE', 'CANCELLED'].includes(t.status) && t.deadline === TODAY).length;
+    if (todayDue > 0) out.push({ tag: '오늘의 나', icon: '🔥', text: `오늘 마감이 ${todayDue}개 있어요. 먼저 처리해볼까요?` });
+    const doing = tasks.filter((t) => t.status === 'DOING').length;
+    if (doing >= 5) out.push({ tag: '오늘의 나', icon: '🧘', text: `집중 항목이 ${doing}개예요. 5개 이하로 줄이면 더 잘 굴러가요.` });
+    const stale = tasks.filter((t) => ['TODO', 'DOING'].includes(t.status) && since(t.updatedAt) >= 7).length;
+    if (stale > 0) out.push({ tag: '오늘의 나', icon: '🧹', text: `${stale}개 항목이 7일 넘게 멈춰 있어요. 정리하면 깔끈해져요.` });
+    const t0 = new Date(TODAY + 'T00:00:00');
+    const mon = new Date(t0);mon.setDate(t0.getDate() - ((t0.getDay() + 6) % 7));
+    const sun = new Date(mon);sun.setDate(mon.getDate() + 6);
+    const pm = new Date(mon);pm.setDate(mon.getDate() - 7);
+    const pmEnd = new Date(pm);pmEnd.setDate(pm.getDate() + 6);
+    const inR = (d, a, b) => d && d >= a && d <= b;
+    const created = tasks.filter((t) => inR(t.createdAt, ymd(mon), ymd(sun)));
+    const doneWk = tasks.filter((t) => t.status === 'DONE' && inR(t.updatedAt, ymd(mon), ymd(sun))).length;
+    const donePrev = tasks.filter((t) => t.status === 'DONE' && inR(t.updatedAt, ymd(pm), ymd(pmEnd))).length;
+    if (created.length > 0) {
+      const pct = Math.round(doneWk / created.length * 100);
+      const diff = doneWk - donePrev;
+      out.push({ tag: '오늘의 나', icon: '📈', text: `이번 주 완료율 ${pct}% · 완료 ${doneWk}개${diff !== 0 ? ` (지난주 대비 ${diff > 0 ? '+' : ''}${diff})` : ''}` });
+    }
+    return out;
+  })();
+  const pool = nudges.length ? [...nudges, ...RIBBON_ITEMS] : RIBBON_ITEMS;
+
+  const item = pool[idx % pool.length];
+  const theme = RIBBON_THEMES[item.tag] || RIBBON_THEMES['오늘의 한 줄'];
+  return (
+    <div style={{ padding: '10px 14px 8px', flexShrink: 0 }}>
+      <div className="ribbon-card" key={idx} style={{
+        display: 'flex', alignItems: 'center', gap: 11,
+        padding: '8px 12px', borderRadius: 14,
+        background: `linear-gradient(120deg, ${theme.tint}, transparent 72%), var(--surface)`,
+        border: '1px solid var(--border)', boxShadow: '0 6px 18px rgba(0,0,0,.06)'
+      }}>
+        <div className="ribbon-bubble" key={'b' + idx} style={{ width: 34, height: 34, borderRadius: 11, background: theme.grad, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0, boxShadow: '0 5px 12px rgba(0,0,0,.18)' }}>{item.icon}</div>
+        <span style={{ fontSize: 10, fontWeight: 800, color: '#fff', background: theme.grad, padding: '2px 8px', borderRadius: 99, letterSpacing: '-.01em', flexShrink: 0, whiteSpace: 'nowrap' }}>{item.tag}</span>
+        <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 600, color: 'var(--text)', letterSpacing: '-.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.text}</span>
+        <button className="ribbon-ghost" onClick={() => setIdx((i) => (i + 1) % pool.length)} title="다른 한 줄 보기"
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)', fontSize: 14, width: 28, height: 28, borderRadius: 8, flexShrink: 0 }}>⟳</button>
+        <button className="ribbon-ghost" onClick={() => setCol(true)} title="접기"
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)', fontSize: 13, width: 28, height: 28, borderRadius: 8, flexShrink: 0 }}>✕</button>
+      </div>
+    </div>);
+}
 
 function App() {
   const today = useToday(); /* 자정 넘어가면 자동 갱신 */
@@ -5405,6 +5737,7 @@ function App() {
     <div className="app">
       <Sidebar view={view} setView={setView} dark={dark} setDark={setDark} projFilter={projFilter} setProjFilter={setProjFilter} projects={projects} onManageProjects={() => setShowProjMgr(true)} onSelectDate={handleCalendarSelect} selectedDate={selectedDate} journalDates={journalDates} setShowSearch={setShowSearch} />
       <div className="main">
+        <TopRibbon tasks={tasks} />
         <div className="main-header">
           {view === 'today' && <>
             <div>
@@ -5450,13 +5783,23 @@ function App() {
             </div>
             <div style={{ marginLeft: 'auto' }} />
           </>}
+          {view === 'calendar' && <>
+            <div>
+              <div className="header-title">🗓 캘린더</div>
+              <div className="header-sub">마감 예정과 완료를 한 달력에 · {projFilter !== '전체' ? projFilter : '전체 프로젝트'}</div>
+            </div>
+            <div style={{ marginLeft: 'auto' }} />
+          </>}
         </div>
         <div className="main-body">
+          <div className="view-anim" key={view} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
           {view === 'today'  && <Dashboard tasks={tasks} setTasks={setTasks} projFilter={projFilter} projects={projects} selectedDate={selectedDate} setSelectedDate={setSelectedDate} refreshTasks={refreshTasks} dataVersion={dataVersion} bumpDataVersion={bumpDataVersion} journalDates={journalDates} refreshJournalDates={refreshJournalDates} />}
           {view === 'inbox'  && <InboxView tasks={tasks} projects={projects} refreshTasks={refreshTasks} />}
           {view === 'board'  && <BoardView tasks={tasks} projects={projects} refreshTasks={refreshTasks} />}
           {view === 'review' && <ReviewView tasks={tasks} setTasks={setTasks} dataVersion={dataVersion} refreshTasks={refreshTasks} onGoToday={() => setView('today')} />}
           {view === 'gantt'  && <GanttView projFilter={projFilter} onImport={() => setShowExcel(true)} tasks={tasks} setSelectedDate={setSelectedDate} setView={setView} refreshTasks={refreshTasks} bumpDataVersion={bumpDataVersion} />}
+          {view === 'calendar' && <CalendarView tasks={tasks} projFilter={projFilter} setSelectedDate={setSelectedDate} setView={setView} />}
+          </div>
         </div>
       </div>
       {showExcel && <ExcelModal onClose={() => setShowExcel(false)} />}
