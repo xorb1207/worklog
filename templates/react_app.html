@@ -1018,6 +1018,20 @@ function joinSections(sections) {
   return out.join('\n');
 }
 
+/* ── 일지 템플릿 ── 빈 일지에서 "템플릿으로 시작"으로 삽입. localStorage로 사용자 편집 보존.
+   parseSections/joinSections와 호환되는 평문 마크다운. */
+const DEFAULT_JOURNAL_TEMPLATE = "# 오늘 할 일\n- [ ] \n\n# 메모\n\n# 결정\n\n# 회신 대기\n\n# 이슈";
+const JOURNAL_TEMPLATE_KEY = 'worklog.journal.template';
+function getJournalTemplate() {
+  try {
+    const v = localStorage.getItem(JOURNAL_TEMPLATE_KEY);
+    return (v == null || v === '') ? DEFAULT_JOURNAL_TEMPLATE : v;
+  } catch (e) { return DEFAULT_JOURNAL_TEMPLATE; }
+}
+function saveJournalTemplate(str) {
+  try { localStorage.setItem(JOURNAL_TEMPLATE_KEY, str == null ? '' : str); } catch (e) {}
+}
+
 /* ── 날짜 위키링크 해석 ── [[2026-05-12]] · [[오늘]] · [[어제]] · [[내일]] · [[N일전]] ── */
 function ymdLocal(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -1162,7 +1176,11 @@ function MarkdownBody({ body, onToggleCheckbox, onEdit, onJumpDate }) {
 
   return (
     <div
-      onClick={onEdit}
+      onClick={(e) => {
+        if (!window.getSelection || window.getSelection().toString().length === 0) {
+          onEdit(e);
+        }
+      }}
       title="클릭해서 편집"
       style={{
         padding: '4px 4px 8px 26px', fontFamily: 'var(--font)', fontSize: 13,
@@ -1255,6 +1273,32 @@ function renderHighlight(text) {
   });
   nodes.push('\u200b');
   return nodes;
+}
+/* ── 네이티브 undo(Ctrl/Cmd+Z) 보존 텍스트 치환 ──
+   React 제어 textarea에 직접 value를 세팅하면 브라우저의 undo 기록이 날아간다.
+   execCommand('insertText')로 편집하면 input 이벤트(=onChange)가 발생해 state가 동기화되면서
+   동시에 undo 스택에도 한 단계로 기록된다. (from~to 선택 영역을 text로 치환) */
+function nativeReplace(ta, from, to, text, caretStart, caretEnd) {
+  if (!ta) return;
+  ta.focus();
+  ta.setSelectionRange(from, to);
+  let ok = false;
+  try { ok = document.execCommand('insertText', false, text); } catch (e) { ok = false; }
+  if (!ok) {
+    /* execCommand 미지원 폴백 — React value 트래커를 우회해 input 이벤트 발생 */
+    const v = ta.value;
+    const next = v.slice(0, from) + text + v.slice(to);
+    const proto = Object.getPrototypeOf(ta);
+    const setter = Object.getOwnPropertyDescriptor(proto, 'value') && Object.getOwnPropertyDescriptor(proto, 'value').set;
+    if (setter) setter.call(ta, next); else ta.value = next;
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  if (caretStart != null) {
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.setSelectionRange(caretStart, caretEnd == null ? caretStart : caretEnd);
+    });
+  }
 }
 function HighlightedTextarea({ taRef, value, onChange, onKeyDown, onBlur, placeholder, rows, isPreamble }) {
   const overlayRef = React.useRef(null);
@@ -1430,8 +1474,7 @@ function JournalFoldView({ text, onChange, dateKey, onSlashTask, isToday, onJump
     } else {
       nv = v.slice(0, s) + marker + sel + marker + v.slice(e);ns = s + ml;ne = e + ml;
     }
-    updateBody(idx, nv);
-    requestAnimationFrame(() => {ta.focus();ta.setSelectionRange(ns, ne);});
+    nativeReplace(ta, 0, v.length, nv, ns, ne);
   }
 
   function bodyKeyDown(e, idx) {
@@ -1475,8 +1518,7 @@ function JournalFoldView({ text, onChange, dateKey, onSlashTask, isToday, onJump
       prio !== 'B' ? ` !${prio}` : '') +
       ` 📌` + (
       project ? ` @${project}` : '');
-      const newBody = value.slice(0, lineStart) + replacement + value.slice(lineEnd);
-      updateBody(idx, newBody);
+      nativeReplace(ta, lineStart, lineEnd, replacement, lineStart + replacement.length);
       setSlash(null);
       if (onSlashTask) onSlashTask({ title, prio, deadline, project });
       return;
@@ -1500,17 +1542,41 @@ function JournalFoldView({ text, onChange, dateKey, onSlashTask, isToday, onJump
         : lines.map((l) => '  ' + l);
       const newBlock = newLines.join('\n');
       const delta = newBlock.length - block.length;
-      const newBody = value.slice(0, lineStart) + newBlock + value.slice(blockEnd);
-      updateBody(idx, newBody);
-      requestAnimationFrame(() => {
-        if (start === end) {
-          const d = newLines[0].length - lines[0].length;
-          ta.selectionStart = ta.selectionEnd = Math.max(lineStart, start + d);
-        } else {
-          ta.selectionStart = lineStart; ta.selectionEnd = blockEnd + delta;
-        }
-      });
+      let cs, ce;
+      if (start === end) {
+        const d = newLines[0].length - lines[0].length;
+        cs = ce = Math.max(lineStart, start + d);
+      } else {
+        cs = lineStart; ce = blockEnd + delta;
+      }
+      nativeReplace(ta, lineStart, blockEnd, newBlock, cs, ce);
       return;
+    }
+
+    /* Shift+Enter → 현재 줄이 들여쓰기/리스트면 한 단계 하위(자식)로 새 항목
+       (slash/menu 비활성 시) */
+    if (e.key === 'Enter' && e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229
+        && !(slash && slash.idx === idx) && !(menu && menu.idx === idx)) {
+      const ta = e.target;
+      const value = ta.value;
+      const start = ta.selectionStart;
+      const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+      const currentLine = value.slice(lineStart, start);
+      const lm = currentLine.match(/^(\s*)([-*])\s(\[[ xX]\]\s)?(.*)$/);
+      if (lm) {
+        e.preventDefault();
+        const [, indent, bullet, checkbox] = lm;
+        const prefix = '\n' + indent + '  ' + bullet + ' ' + (checkbox ? '[ ] ' : '');
+        nativeReplace(ta, start, start, prefix, start + prefix.length);
+        return;
+      }
+      const im = currentLine.match(/^(\s+)\S/);
+      if (im) {
+        e.preventDefault();
+        const prefix = '\n' + im[1] + '  ';
+        nativeReplace(ta, start, start, prefix, start + prefix.length);
+        return;
+      }
     }
 
     /* Enter → 리스트 자동 이어쓰기 (slash/menu 없을 때) */
@@ -1526,16 +1592,12 @@ function JournalFoldView({ text, onChange, dateKey, onSlashTask, isToday, onJump
         const [, indent, bullet, checkbox, rest] = m;
         if (!rest.trim()) {
           e.preventDefault();
-          const newBody = value.slice(0, lineStart) + '\n' + value.slice(start);
-          updateBody(idx, newBody);
-          requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = lineStart + 1; });
+          nativeReplace(ta, lineStart, start, '\n', lineStart + 1);
           return;
         }
         e.preventDefault();
         const prefix = '\n' + indent + bullet + ' ' + (checkbox ? '[ ] ' : '');
-        const newBody = value.slice(0, start) + prefix + value.slice(start);
-        updateBody(idx, newBody);
-        requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = start + prefix.length; });
+        nativeReplace(ta, start, start, prefix, start + prefix.length);
         return;
       }
     }
@@ -2406,6 +2468,29 @@ function Dashboard({ tasks, setTasks, projFilter, projects, selectedDate, setSel
   const saveTimer = useRef(null);
   const [activeTag, setActiveTag] = useState(null); // 클릭된 태그 (모든 날짜에서 해당 태그 줄 모아보기)
 
+  /* 빈 일지 템플릿 제안 — 자동 삽입 금지, 빈 일지일 때만 표시. 날짜 바뀌면 다시 제안. */
+  const [dismissedEmpty, setDismissedEmpty] = useState(false);
+  const [showTemplateEdit, setShowTemplateEdit] = useState(false);
+  useEffect(() => { setDismissedEmpty(false); }, [selectedDate]);
+  function applyJournalTemplate() {
+    const tpl = getJournalTemplate();
+    setJournalText(tpl);
+    setDismissedEmpty(true);
+    setSaveStatus('편집 중...');
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => setSaveStatus('✓ 자동저장됨'), 2000);
+    /* 삽입 후 편집기에 focus + 첫 번째 "- [ ] " 뒤로 캐럿 이동 (평문 textarea 모드일 때) */
+    requestAnimationFrame(() => {
+      const ta = document.querySelector('.journal-textarea')
+              || document.querySelector('.col [data-section-idx] textarea');
+      if (!ta) return;
+      ta.focus();
+      const ci = tpl.indexOf('- [ ] ');
+      const caret = ci >= 0 ? ci + 6 : tpl.length;
+      try { ta.setSelectionRange(caret, caret); } catch (e) {}
+    });
+  }
+
   // 날짜 이동 헬퍼
   function shiftDate(days) {
     const [y, m, d] = selectedDate.split('-').map(Number);
@@ -2656,10 +2741,7 @@ function Dashboard({ tasks, setTasks, projFilter, projects, selectedDate, setSel
         (prio !== 'B' ? ` !${prio}` : '') +
         ` 📌` + (project && project !== '미분류' ? ` @${project}` : '') +
         (waitingFor ? ` @${waitingFor}` : '');
-      const newValue = value.slice(0, lineStart) + replacement + value.slice(lineEnd);
-      setJournalText(newValue);
-      const caret = lineStart + replacement.length;
-      requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = caret; });
+      nativeReplace(ta, lineStart, lineEnd, replacement, lineStart + replacement.length);
       setSlashCmd(null);
       // Work item 생성
       const startNow = selectedDate === TODAY && meta?.autoStart;
@@ -2724,23 +2806,38 @@ function Dashboard({ tasks, setTasks, projFilter, projects, selectedDate, setSel
       }
       const newBlock = newLines.join('\n');
       const delta = newBlock.length - block.length;
-      const newValue = value.slice(0, lineStart) + newBlock + value.slice(blockEnd);
-      setJournalText(newValue);
-      requestAnimationFrame(() => {
-        if (start === end) {
-          // 단일 커서: 같은 줄 안에서 커서 위치 유지 (들여쓰기 양만큼 이동)
-          const firstLineDelta = newLines[0].length - lines[0].length;
-          ta.selectionStart = ta.selectionEnd = Math.max(lineStart, start + firstLineDelta);
-        } else {
-          // 여러 줄 선택: 블록 전체 다시 선택
-          ta.selectionStart = lineStart;
-          ta.selectionEnd = blockEnd + delta;
-        }
-      });
-      setSaveStatus('편집 중...');
-      clearTimeout(saveTimer.current);
-      saveTimer.current = setTimeout(() => setSaveStatus('✓ 자동저장됨'), 2000);
+      let cs, ce;
+      if (start === end) {
+        const firstLineDelta = newLines[0].length - lines[0].length;
+        cs = ce = Math.max(lineStart, start + firstLineDelta);
+      } else {
+        cs = lineStart;
+        ce = blockEnd + delta;
+      }
+      nativeReplace(ta, lineStart, blockEnd, newBlock, cs, ce);
       return;
+    }
+    /* Shift+Enter → 현재 줄이 들여쓰기/리스트면 한 단계 하위(자식)로 새 항목 */
+    if (e.key === 'Enter' && e.shiftKey && !e.isComposing && e.keyCode !== 229) {
+      const start = ta.selectionStart;
+      const value = ta.value;
+      const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+      const currentLine = value.slice(lineStart, start);
+      const lm = currentLine.match(/^(\s*)([-*])\s(\[[ xX]\]\s)?(.*)$/);
+      if (lm) {
+        e.preventDefault();
+        const [, indent, bullet, checkbox] = lm;
+        const prefix = '\n' + indent + '  ' + bullet + ' ' + (checkbox ? '[ ] ' : '');
+        nativeReplace(ta, start, start, prefix, start + prefix.length);
+        return;
+      }
+      const im = currentLine.match(/^(\s+)\S/);
+      if (im) {
+        e.preventDefault();
+        const prefix = '\n' + im[1] + '  ';
+        nativeReplace(ta, start, start, prefix, start + prefix.length);
+        return;
+      }
     }
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
       const start = ta.selectionStart;
@@ -2755,26 +2852,13 @@ function Dashboard({ tasks, setTasks, projFilter, projects, selectedDate, setSel
         // 빈 항목 → 리스트 종료
         if (!rest.trim()) {
           e.preventDefault();
-          const newValue = value.slice(0, lineStart) + '\n' + value.slice(start);
-          setJournalText(newValue);
-          requestAnimationFrame(() => {
-            ta.selectionStart = ta.selectionEnd = lineStart + 1;
-          });
-          setSaveStatus('편집 중...');
-          clearTimeout(saveTimer.current);
-          saveTimer.current = setTimeout(() => setSaveStatus('✓ 자동저장됨'), 2000);
+          nativeReplace(ta, lineStart, start, '\n', lineStart + 1);
           return;
         }
         // 다음 줄에 같은 prefix 자동 삽입
         e.preventDefault();
         const prefix = '\n' + indent + bullet + ' ' + (checkbox ? '[ ] ' : '');
-        const newValue = value.slice(0, start) + prefix + value.slice(start);
-        setJournalText(newValue);
-        const caret = start + prefix.length;
-        requestAnimationFrame(() => {ta.selectionStart = ta.selectionEnd = caret;});
-        setSaveStatus('편집 중...');
-        clearTimeout(saveTimer.current);
-        saveTimer.current = setTimeout(() => setSaveStatus('✓ 자동저장됨'), 2000);
+        nativeReplace(ta, start, start, prefix, start + prefix.length);
       }
     }
   }
@@ -2795,7 +2879,7 @@ function Dashboard({ tasks, setTasks, projFilter, projects, selectedDate, setSel
     const [, head, mark, tail] = m;
     const newMark = mark === ' ' ? 'x' : ' ';
     const newLine = `${head}[${newMark}]${tail}`;
-    setJournalText(value.slice(0, lineStart) + newLine + value.slice(lineEnd));
+    nativeReplace(ta, lineStart, lineEnd, newLine, pos);
     setSaveStatus('편집 중...');
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => setSaveStatus('✓ 자동저장됨'), 2000);
@@ -2855,14 +2939,8 @@ function Dashboard({ tasks, setTasks, projFilter, projects, selectedDate, setSel
     const m = before.match(/#([^\s#]*)$/);
     if (!m) return;
     const start = caret - m[1].length;
-    const newValue = value.slice(0, start) + tag + ' ' + value.slice(caret);
-    setJournalText(newValue);
+    nativeReplace(ta, start, caret, tag + ' ', start + tag.length + 1);
     setTagSuggest(null);
-    requestAnimationFrame(() => {
-      ta.focus();
-      const newCaret = start + tag.length + 1;
-      ta.selectionStart = ta.selectionEnd = newCaret;
-    });
   }
 
   // Column order state — saves to localStorage
@@ -3016,6 +3094,21 @@ function Dashboard({ tasks, setTasks, projFilter, projects, selectedDate, setSel
             </div>
         }
           <div style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column' }}>
+          {journalText.trim() === '' && !dismissedEmpty &&
+          <div style={{
+            background: 'var(--surface-2)', border: '1px solid var(--border)',
+            borderRadius: 'var(--radius)', padding: '10px 12px', marginBottom: 10,
+            display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap'
+          }}>
+              <span style={{ fontSize: 12, color: 'var(--text-3)' }}>빈 일지예요. 템플릿으로 시작해 볼까요?</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
+                <button className="btn btn-primary btn-sm" onClick={applyJournalTemplate}>＋ 템플릿으로 시작</button>
+                <button onClick={() => setDismissedEmpty(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)', fontSize: 11, padding: 0 }}>직접 쓰기</button>
+                <span style={{ color: 'var(--border-2)', fontSize: 11 }}>·</span>
+                <button onClick={() => setShowTemplateEdit(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)', fontSize: 11, padding: 0 }}>편집</button>
+              </div>
+            </div>
+          }
           {window.JournalFoldView ?
           <window.JournalFoldView text={journalText} dateKey={selectedDate}
             isToday={selectedDate === TODAY}
@@ -3276,6 +3369,7 @@ function Dashboard({ tasks, setTasks, projFilter, projects, selectedDate, setSel
   const gridCols = trackParts.join(' ');
 
   return (
+    <React.Fragment>
     <div ref={dashboardRef} className="dashboard-grid" style={{ gridTemplateColumns: gridCols }}>
       {colOrder.map((key, idx) =>
       <React.Fragment key={key}>
@@ -3290,7 +3384,9 @@ function Dashboard({ tasks, setTasks, projFilter, projects, selectedDate, setSel
         }
         </React.Fragment>
       )}
-    </div>);
+    </div>
+    {showTemplateEdit && <TemplateEditModal onClose={() => setShowTemplateEdit(false)} />}
+    </React.Fragment>);
 
 }
 
@@ -4482,6 +4578,45 @@ function TaskCleanupView({ tasks, setTasks, onResume, refreshTasks }) {
           </div>
         )}
       </Section>
+    </div>);
+
+}
+
+/* ─── 일지 템플릿 편집 Modal ─── */
+function TemplateEditModal({ onClose }) {
+  const [draft, setDraft] = useState(() => getJournalTemplate());
+  function save() { saveJournalTemplate(draft); onClose(); }
+  return (
+    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal" style={{ width: 480 }}>
+        <div className="modal-header">
+          <div className="modal-title">📝 일지 템플릿 편집</div>
+          <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', fontSize: 18 }} onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body">
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            spellCheck={false}
+            style={{
+              width: '100%', height: 220, resize: 'vertical', boxSizing: 'border-box',
+              background: 'var(--surface-2)', border: '1px solid var(--border)',
+              borderRadius: 'var(--radius)', padding: '10px 12px',
+              fontFamily: 'var(--mono)', fontSize: 12, lineHeight: 1.7,
+              color: 'var(--text)', outline: 'none'
+            }} />
+          <div style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 8 }}>
+            빈 일지를 열면 이 템플릿으로 시작할 수 있어요.
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-sm" onClick={() => setDraft(DEFAULT_JOURNAL_TEMPLATE)}>기본값으로 복원</button>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button className="btn" onClick={onClose}>취소</button>
+            <button className="btn btn-primary" onClick={save}>저장</button>
+          </div>
+        </div>
+      </div>
     </div>);
 
 }
